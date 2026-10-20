@@ -55,6 +55,7 @@
 #include "convert/GB_convert.h"
 #include "gateway/GB_cuda_gateway.h"
 #include "callback/GB_callbacks.h"
+#include "memory/include/GB_array.h"
 #include "helper/GB_factory.h"
 #include "matrix/GB_matrix.h"
 

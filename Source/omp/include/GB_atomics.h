@@ -334,6 +334,61 @@
     #endif
 
 //------------------------------------------------------------------------------
+// atomic fetch-and-increment / fetch-and-decrement / load for int64_t
+//------------------------------------------------------------------------------
+
+// These are used for the reference counts of the GB_array_hdr blocks that own
+// the A->[phbix] content of a matrix (see memory/include/GB_array.h).  Unlike
+// the OpenMP-based atomics above, they do not depend on OpenMP: the reference
+// count must be correct when multiple user threads dup and free matrices that
+// share the same content, even if GraphBLAS is compiled without OpenMP.  The
+// MS Visual Studio intrinsics and the gcc/clang/icx __atomic builtins are
+// both available without OpenMP.
+
+// int64_t result, target ;
+// do this atomically: { result = target ; target++ ; }  (acquire/release)
+// do this atomically: { result = target ; target-- ; }  (acquire/release)
+// do this atomically: { result = target ; }             (acquire)
+
+#if GB_COMPILER_MSC
+
+    #define GB_ATOMIC_FETCH_INC64(result,target)                        \
+    {                                                                   \
+        result = _InterlockedIncrement64 ((int64_t volatile *)(&(target)));\
+        result-- ;                                                      \
+    }
+
+    #define GB_ATOMIC_FETCH_DEC64(result,target)                        \
+    {                                                                   \
+        result = _InterlockedDecrement64 ((int64_t volatile *)(&(target)));\
+        result++ ;                                                      \
+    }
+
+    #define GB_ATOMIC_LOAD64(result,target)                             \
+    {                                                                   \
+        result = _InterlockedOr64 ((int64_t volatile *)(&(target)), 0) ;\
+    }
+
+#else
+
+    #define GB_ATOMIC_FETCH_INC64(result,target)                        \
+    {                                                                   \
+        result = __atomic_fetch_add (&(target), 1, __ATOMIC_ACQ_REL) ;  \
+    }
+
+    #define GB_ATOMIC_FETCH_DEC64(result,target)                        \
+    {                                                                   \
+        result = __atomic_fetch_sub (&(target), 1, __ATOMIC_ACQ_REL) ;  \
+    }
+
+    #define GB_ATOMIC_LOAD64(result,target)                             \
+    {                                                                   \
+        result = __atomic_load_n (&(target), __ATOMIC_ACQUIRE) ;        \
+    }
+
+#endif
+
+//------------------------------------------------------------------------------
 // atomic compare-and-exchange
 //------------------------------------------------------------------------------
 
