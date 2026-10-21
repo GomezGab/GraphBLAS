@@ -259,8 +259,13 @@ GrB_Info GB_accum_mask          // C<M> = accum (C,T)
     // GB_transplant for Z=T and GB_transplant_conform in GB_mask for C=Z).
     // So in this case, GB_subassign takes more work.
 
-    if (GB_any_aliased (C, M)) GBURBLE ("(C aliased with M) ") ;
-    if (GB_any_aliased (C, T)) GBURBLE ("(C aliased with T) ") ;
+    // C may share arrays with M or T without being aliased with them (after a
+    // GrB_dup, or when T is a shallow copy of C as in C<M>=C).  GB_subassign
+    // would be correct in that case (it takes private copies of C's arrays
+    // before writing), but it would then insert all of T as pending tuples
+    // into C, so treat shared arrays like aliases when choosing the method.
+    if (GB_any_shared (C, M)) GBURBLE ("(C aliased with M) ") ;
+    if (GB_any_shared (C, T)) GBURBLE ("(C aliased with T) ") ;
 
     bool use_subassign = false ;
 
@@ -280,7 +285,7 @@ GrB_Info GB_accum_mask          // C<M> = accum (C,T)
             // C): use GB_subassign if the update is small (resuling in a small
             // number of pending tuples), and if C is not aliased with M or T.
             use_subassign = (tnz + cnpending <= cnz)
-                && !GB_any_aliased (C, M) && !GB_any_aliased (C, T) ;
+                && !GB_any_shared (C, M) && !GB_any_shared (C, T) ;
         }
     }
 

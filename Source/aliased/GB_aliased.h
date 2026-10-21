@@ -15,6 +15,12 @@
 // more restrictive.
 
 // GB_any_aliased also checks the content of A and B
+bool GB_any_shared              // true if A and B hold any array in common
+(
+    GrB_Matrix A,           // input A matrix
+    GrB_Matrix B            // input B matrix
+) ;
+
 bool GB_any_aliased             // determine if A and B are aliased in any way
 (
     GrB_Matrix A,           // input A matrix
