@@ -268,10 +268,46 @@ GrB_Info GB_array_own       // GrB_SUCCESS or GrB_OUT_OF_MEMORY
 
 // Called before a matrix is modified in place (setElement, assign, in-place
 // apply or mxm, unjumble, ...).  Each array that is shared with another
-// matrix (after GrB_dup, or an internal share) is copied in full, so the other
-// owners never see the modification.  Arrays with a single owner are left as
-// they are, so this is O(1) in the common case.  Borrowed (shallow) arrays
-// are also left as they are, to preserve the existing shallow semantics.
+// matrix (after GrB_dup, or an internal share) is replaced with a private
+// copy, so the other owners never see the modification.  Arrays with a single
+// owner are left as they are, so this is O(1) in the common case.  Borrowed
+// (shallow) arrays are also left as they are, to preserve the existing
+// shallow semantics.
+//
+// Only the live part of each array is copied, as GB_dup_worker copied it
+// before arrays were shared: the block may have slack beyond the live part
+// (from GB_ix_realloc growth, or an array packed with a larger size), and
+// that slack is not carried into the copy.  The copy can be grown later by
+// GB_array_realloc.  The counts of A must be current: A->plen for p and h,
+// A->nvals (entries held, zombies included) for i, b, and x.
+
+static uint64_t GB_own_live_bytes   // # of live bytes of one array of A
+(
+    GrB_Matrix A,
+    int slot                // one of GB_OWN_P, ..., GB_OWN_X
+)
+{
+    // # of entries held: zombies count, as do all positions of a bitmap.
+    // Not GB_nnz_held, which returns 0 when A->x is NULL.
+    int64_t nheld = (A->p != NULL) ? A->nvals : GB_nnz_full (A) ;
+    switch (slot)
+    {
+        case GB_OWN_P :
+            // A->plen + 1 entries; A->plen == A->vdim if A is sparse
+            return ((A->plen + 1) * (A->p_is_32 ? sizeof (uint32_t) :
+                sizeof (uint64_t))) ;
+        case GB_OWN_H :
+            return (A->plen * (A->j_is_32 ? sizeof (uint32_t) :
+                sizeof (uint64_t))) ;
+        case GB_OWN_B :
+            return (nheld) ;
+        case GB_OWN_I :
+            return (nheld * (A->i_is_32 ? sizeof (uint32_t) :
+                sizeof (uint64_t))) ;
+        default :
+            return ((A->iso ? 1 : nheld) * A->type->size) ;
+    }
+}
 
 GrB_Info GB_own_matrix      // GrB_SUCCESS or GrB_OUT_OF_MEMORY
 (
@@ -291,7 +327,7 @@ GrB_Info GB_own_matrix      // GrB_SUCCESS or GrB_OUT_OF_MEMORY
     #define GB_OWN_SLOT(c,flag)                                             \
     if ((which & flag) && GB_array_is_shared (GB_CSLOT (A, c)))             \
     {                                                                       \
-        info = GB_array_own (GB_SLOT (A, c), GB_array_memsize (GB_CSLOT (A, c)),\
+        info = GB_array_own (GB_SLOT (A, c), GB_own_live_bytes (A, flag),   \
             arena, nthreads) ;                                              \
         if (info != GrB_SUCCESS) return (info) ;                            \
     }
@@ -303,6 +339,90 @@ GrB_Info GB_own_matrix      // GrB_SUCCESS or GrB_OUT_OF_MEMORY
     #undef GB_OWN_SLOT
     return (GrB_SUCCESS) ;
 }
+
+//------------------------------------------------------------------------------
+// GB_own_snapshot_take / GB_own_snapshot_check: catch writes to shared arrays
+//------------------------------------------------------------------------------
+
+// A method that modifies C in place names the arrays it writes when it calls
+// GB_own_matrix.  In a GB_DEBUG build, the shared arrays it did not name are
+// hashed before the method runs and checked afterwards: if the block is still
+// in the slot and its live bytes changed, the method wrote into an array it
+// does not own.  A block that was replaced (owned, reallocated, or rebuilt by
+// the method) is not checked.
+
+#ifdef GB_DEBUG
+
+static uint64_t GB_own_hash (const void *block, uint64_t nbytes)
+{
+    // FNV-1a
+    const uint8_t *b = (const uint8_t *) block ;
+    uint64_t h = 0xcbf29ce484222325ULL ;
+    for (uint64_t k = 0 ; k < nbytes ; k++)
+    {
+        h ^= (uint64_t) b [k] ;
+        h *= 0x100000001b3ULL ;
+    }
+    return (h) ;
+}
+
+void GB_own_snapshot_take   // record the shared arrays not in which
+(
+    GB_own_snapshot *snap,
+    GrB_Matrix A,
+    int which               // the arrays claimed by GB_own_matrix
+)
+{
+    memset (snap, 0, sizeof (GB_own_snapshot)) ;
+    if (A == NULL)
+    {
+        return ;
+    }
+    #define GB_SNAP(k,c,flag)                                               \
+    if (!(which & flag) && GB_array_is_shared (GB_CSLOT (A, c)))            \
+    {                                                                       \
+        uint64_t n = GB_own_live_bytes (A, flag) ;                          \
+        ASSERT (n <= GB_array_memsize (GB_CSLOT (A, c))) ;                  \
+        snap->block [k] = A->c ;                                            \
+        snap->mem [k] = A->c ## _mem ;                                      \
+        snap->nbytes [k] = n ;                                              \
+        snap->hash [k] = GB_own_hash (A->c, n) ;                            \
+    }
+    GB_SNAP (0, p, GB_OWN_P) ;
+    GB_SNAP (1, h, GB_OWN_H) ;
+    GB_SNAP (2, b, GB_OWN_B) ;
+    GB_SNAP (3, i, GB_OWN_I) ;
+    GB_SNAP (4, x, GB_OWN_X) ;
+    #undef GB_SNAP
+}
+
+void GB_own_snapshot_check  // assert that no recorded array was written
+(
+    const GB_own_snapshot *snap,
+    GrB_Matrix A
+)
+{
+    if (A == NULL)
+    {
+        return ;
+    }
+    #define GB_SNAPCHECK(k,c)                                               \
+    if (snap->block [k] != NULL && snap->block [k] == A->c                  \
+        && snap->mem [k] == A->c ## _mem)                                   \
+    {                                                                       \
+        /* the same block is still in the slot: it must be unchanged */     \
+        ASSERT (GB_array_memsize (GB_CSLOT (A, c)) >= snap->nbytes [k]) ;   \
+        ASSERT (snap->hash [k] == GB_own_hash (A->c, snap->nbytes [k])) ;   \
+    }
+    GB_SNAPCHECK (0, p) ;
+    GB_SNAPCHECK (1, h) ;
+    GB_SNAPCHECK (2, b) ;
+    GB_SNAPCHECK (3, i) ;
+    GB_SNAPCHECK (4, x) ;
+    #undef GB_SNAPCHECK
+}
+
+#endif
 
 //------------------------------------------------------------------------------
 // GB_array_realloc: reallocate an owned block (copied first if shared)
@@ -337,15 +457,27 @@ void GB_array_realloc       // reallocate an owned, unshared block
     ASSERT (!(*shallow)) ;
     if (GB_array_is_shared (*p, *mem, *shallow))
     {
-        // the block is shared with another matrix: take a private copy first
-        GrB_Info info = GB_array_own (p, mem, shallow,
-            GB_array_memsize (*p, *mem, *shallow), arena,
-            GB_Context_nthreads_max ( )) ;
-        if (info != GrB_SUCCESS)
+        // the block is shared with another matrix: instead of copying it and
+        // then reallocating the copy, allocate a block of the new size and
+        // copy as much of the old block as fits.  The old block is untouched.
+        void *new_block = NULL ;
+        uint64_t new_mem = 0 ;
+        bool new_shallow = false ;
+        if (GB_array_malloc (&new_block, &new_mem, &new_shallow, nitems_new,
+            size_of_item, GB_array_arena (*p, *mem, *shallow)) == NULL)
         {
+            // out of memory; the slot is unchanged
             (*ok) = false ;
             return ;
         }
+        uint64_t old_size = GB_array_memsize (*p, *mem, *shallow) ;
+        uint64_t new_size = GB_array_memsize (new_block, new_mem, new_shallow) ;
+        GB_memcpy (new_block, *p, GB_IMIN (old_size, new_size),
+            GB_Context_nthreads_max ( )) ;
+        GB_array_release (p, mem, shallow) ;
+        GB_array_move (p, mem, shallow, &new_block, &new_mem, &new_shallow) ;
+        (*ok) = true ;
+        return ;
     }
     GB_array_hdr *hdr = (GB_array_hdr *) (uintptr_t) (*mem) ;
     ASSERT (GB_array_refs (*p, *mem, *shallow) == 1) ;

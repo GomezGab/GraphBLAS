@@ -112,9 +112,13 @@ GrB_Info GB_bitmap_assign_6_whole   // C bitmap, no M, no accum
             // C = A where C is bitmap and A is bitmap or full
             //------------------------------------------------------------------
 
+            // C->x and C->b are overwritten in place, so C must own them
+            // (C->x is written even if C is iso: it holds the iso value)
+            int nthreads_max = GB_Context_nthreads_max ( ) ;
+            GB_OK (GB_own_matrix (C, GB_OWN_B | GB_OWN_X, nthreads_max)) ;
+
             // copy or typecast the values
             GB_OK (GB_cast_matrix (C, A)) ;
-            int nthreads_max = GB_Context_nthreads_max ( ) ;
 
             if (GB_IS_BITMAP (A))
             { 
@@ -146,7 +150,10 @@ GrB_Info GB_bitmap_assign_6_whole   // C bitmap, no M, no accum
             }
             else
             { 
-                // C remains bitmap: scatter A into the C bitmap
+                // C remains bitmap: scatter A into the C bitmap.  C->b is
+                // written in place, and C->x too unless C is iso.
+                GB_OK (GB_own_matrix (C, GB_OWN_B | ((C->iso) ? 0 : GB_OWN_X),
+                    GB_Context_nthreads_max ( ))) ;
                 GB_OK (GB_bitmap_assign_6b_whole (C, A, Werk)) ;
             }
         }

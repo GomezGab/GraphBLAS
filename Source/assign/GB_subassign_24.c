@@ -97,6 +97,9 @@ GrB_Info GB_subassign_24    // C = A, copy A into an existing matrix C
         // discard the pattern of C
         //----------------------------------------------------------------------
 
+        // C->x is overwritten in place by GB_cast_matrix, so C must own it
+        GB_OK (GB_own_matrix (C, GB_OWN_X, GB_Context_nthreads_max ( ))) ;
+
         // make C full, if not full already
         C->nzombies = 0 ;                   // overwrite any zombies
         GB_Pending_free (&(C->Pending)) ;   // abandon all pending tuples

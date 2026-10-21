@@ -1320,7 +1320,9 @@ if (C==A && !GB_any_aliased (C, M) && Mask_struct && Mask_comp && whole_C_matrix
     { 
         // The iso status of C is unchanged; set its new iso value.
         // C<C,struct>=scalar (method 05f) uses this, if C is iso on input; it
-        // always stays iso on output.
+        // always stays iso on output.  C->x is written in place, so C must
+        // own it (a single entry if it is shared).
+        GB_OK (GB_own_matrix (C, GB_OWN_X, 1)) ;
         memcpy (C->x, cout, csize) ;
     }
     ASSERT_MATRIX_OK (C, "C output from GB_assign_prep", GB0) ;

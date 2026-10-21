@@ -103,9 +103,6 @@ GrB_Info GB_subassigner             // C(I,J)<#M> = A or accum (C (I,J), A)
     ASSERT (!GB_PENDING (A)) ;
     ASSERT (!GB_ZOMBIES (A)) ;
 
-    // all methods below modify C in place, so C must own its content
-    GB_OK (GB_own_matrix (C, GB_OWN_ALL, GB_Context_nthreads_max ( ))) ;
-
     //--------------------------------------------------------------------------
     // methods that rely on C and A being dense assume they are not jumbled
     //--------------------------------------------------------------------------
@@ -123,6 +120,96 @@ GrB_Info GB_subassigner             // C(I,J)<#M> = A or accum (C (I,J), A)
     }
 
     GBURBLE ("(pending: " GBd ") ", GB_Pending_n (C)) ;
+
+    //--------------------------------------------------------------------------
+    // C must own the arrays that the chosen method writes in place
+    //--------------------------------------------------------------------------
+
+    // C may share its arrays with another matrix (after GrB_dup).  Each method
+    // writes only some of them in place: a new entry is a pending tuple, held
+    // outside the arrays; a deleted entry is a zombie, a sign bit in C->i; a
+    // modified value goes into C->x.  Only the arrays the chosen method
+    // writes are made private here; the rest stay shared.  A method that
+    // replaces an array instead (GB_array_realloc, GB_unjumble, a conversion,
+    // or rebuilding C from scratch) takes ownership of it on its own.
+
+    // C->x is written by every method that modifies existing entries, unless
+    // C is iso: then the kernels never write C->x (its single value was set by
+    // GB_assign_prep).  C->i is written when an entry is deleted (C_replace,
+    // Mask_comp, or C(I,J)=A with A lacking an entry that C(I,J) has), or when
+    // a zombie is brought back to life, which requires C to have zombies.
+
+    const int own_x = (C->iso) ? 0 : GB_OWN_X ;
+    const int own_i_if_zombies = (GB_ZOMBIES (C)) ? GB_OWN_I : 0 ;
+    int which ;
+
+    switch (subassign_method)
+    {
+        case GB_SUBASSIGN_METHOD_BITMAP :   // GB_bitmap_assign owns C->b, C->x
+        case GB_SUBASSIGN_METHOD_21 :       // C becomes full; C->x set by prep
+        case GB_SUBASSIGN_METHOD_24 :       // C = A: rebuilt, or owns C->x itself
+        case GB_SUBASSIGN_METHOD_05e :      // C is empty: rebuilt from M
+        case GB_SUBASSIGN_METHOD_05f :      // all work done by GB_assign_prep
+        case GB_SUBASSIGN_METHOD_25 :       // C is empty: rebuilt from M
+            which = 0 ;
+            break ;
+
+        case GB_SUBASSIGN_METHOD_22 :       // C += x, C dense
+        case GB_SUBASSIGN_METHOD_23 :       // C += A, C dense
+        case GB_SUBASSIGN_METHOD_05d :      // C<M> = x, C dense
+        case GB_SUBASSIGN_METHOD_27 :       // C<C,s> += A
+            which = own_x ;
+            break ;
+
+        case GB_SUBASSIGN_METHOD_06d :      // C<A> = A, C full or bitmap
+            which = own_x | GB_OWN_B ;
+            break ;
+
+        case GB_SUBASSIGN_METHOD_26 :       // columns appended in place
+            which = GB_OWN_P | GB_OWN_H | GB_OWN_I | GB_OWN_X ;
+            break ;
+
+        // no entry is deleted: pending tuples, C->x, and undeleted zombies
+        case GB_SUBASSIGN_METHOD_01 :       // C(I,J) = x
+        case GB_SUBASSIGN_METHOD_03 :       // C(I,J) += x
+        case GB_SUBASSIGN_METHOD_04 :       // C(I,J) += A
+        case GB_SUBASSIGN_METHOD_05 :       // C(I,J)<M> = x
+        case GB_SUBASSIGN_METHOD_07 :       // C(I,J)<M> += x
+        case GB_SUBASSIGN_METHOD_08n :      // C(I,J)<M> += A
+        case GB_SUBASSIGN_METHOD_08s :      // C(I,J)<M> += A
+        case GB_SUBASSIGN_METHOD_13 :       // C(I,J)<!M> = x
+        case GB_SUBASSIGN_METHOD_15 :       // C(I,J)<!M> += x
+            which = own_x | own_i_if_zombies ;
+            break ;
+
+        // entries may be deleted: zombies are created in C->i
+        case GB_SUBASSIGN_METHOD_02 :       // C(I,J) = A
+        case GB_SUBASSIGN_METHOD_06n :      // C(I,J)<M> = A
+        case GB_SUBASSIGN_METHOD_06s :      // C(I,J)<M> = A
+        case GB_SUBASSIGN_METHOD_09 :       // C(I,J)<M,repl> = x
+        case GB_SUBASSIGN_METHOD_10 :       // C(I,J)<M,repl> = A
+        case GB_SUBASSIGN_METHOD_11 :       // C(I,J)<M,repl> += x
+        case GB_SUBASSIGN_METHOD_12 :       // C(I,J)<M,repl> += A
+        case GB_SUBASSIGN_METHOD_14 :       // C(I,J)<!M> = A
+        case GB_SUBASSIGN_METHOD_17 :       // C(I,J)<!M,repl> = x
+        case GB_SUBASSIGN_METHOD_18 :       // C(I,J)<!M,repl> = A
+        case GB_SUBASSIGN_METHOD_19 :       // C(I,J)<!M,repl> += x
+        case GB_SUBASSIGN_METHOD_20 :       // C(I,J)<!M,repl> += A
+            which = own_x | GB_OWN_I ;
+            break ;
+
+        default :                           // unknown method: own everything
+            which = GB_OWN_ALL ;
+            break ;
+    }
+
+    GB_OK (GB_own_matrix (C, which, GB_Context_nthreads_max ( ))) ;
+
+    #ifdef GB_DEBUG
+    // the shared arrays not claimed above must not be written by the method
+    GB_own_snapshot snap ;
+    GB_own_snapshot_take (&snap, C, which) ;
+    #endif
 
     //==========================================================================
     // submatrix assignment C(I,J)<M> = accum (C(I,J),A): meta-algorithm
@@ -715,6 +802,9 @@ GrB_Info GB_subassigner             // C(I,J)<#M> = A or accum (C (I,J), A)
     //--------------------------------------------------------------------------
 
     ASSERT_MATRIX_OK (C, "C subassigner result", GB0) ;
+    #ifdef GB_DEBUG
+    GB_own_snapshot_check (&snap, C) ;
+    #endif
     return (GB_block (C, Werk)) ;
 }
 

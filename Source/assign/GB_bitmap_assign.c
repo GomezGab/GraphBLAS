@@ -58,9 +58,6 @@ GrB_Info GB_bitmap_assign
     GrB_Info info ;
     ASSERT_MATRIX_OK (C, "C for bitmap assign", GB0) ;
 
-    // all methods below modify C in place, so C must own its content
-    GB_OK (GB_own_matrix (C, GB_OWN_ALL, GB_Context_nthreads_max ( ))) ;
-
     //--------------------------------------------------------------------------
     // ensure C is in bitmap form
     //--------------------------------------------------------------------------
@@ -69,6 +66,29 @@ GrB_Info GB_bitmap_assign
     ASSERT (GB_IS_BITMAP (C)) ;
 
     bool whole_C_matrix = (Ikind == GB_ALL && Jkind == GB_ALL) ;
+
+    //--------------------------------------------------------------------------
+    // C must own the arrays that the chosen method writes in place
+    //--------------------------------------------------------------------------
+
+    // C may share C->b and C->x with another matrix (after GrB_dup).  Every
+    // method below writes C->b in place, and C->x too unless C is iso (then
+    // the kernels never write C->x).  The exception is C = A or C = scalar
+    // with no mask and no accum (GB_bitmap_assign_6_whole), which may rebuild
+    // C instead: it takes ownership of what it writes on its own.
+
+    int which = 0 ;
+    if (!(M == NULL && accum == NULL && whole_C_matrix))
+    { 
+        which = GB_OWN_B | ((C->iso) ? 0 : GB_OWN_X) ;
+        GB_OK (GB_own_matrix (C, which, GB_Context_nthreads_max ( ))) ;
+    }
+
+    #ifdef GB_DEBUG
+    // the shared arrays not claimed above must not be written by the method
+    GB_own_snapshot snap ;
+    GB_own_snapshot_take (&snap, C, which) ;
+    #endif
 
     //--------------------------------------------------------------------------
     // do the assignment
@@ -248,6 +268,9 @@ GrB_Info GB_bitmap_assign
     //--------------------------------------------------------------------------
 
     ASSERT_MATRIX_OK (C, "final C for bitmap assign", GB0) ;
+    #ifdef GB_DEBUG
+    GB_own_snapshot_check (&snap, C) ;
+    #endif
     return (GrB_SUCCESS) ;
 }
 

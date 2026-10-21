@@ -423,6 +423,33 @@ GrB_Info GB_own_matrix      // GrB_SUCCESS or GrB_OUT_OF_MEMORY
     int nthreads            // # of threads to use for the copies
 ) ;
 
+#ifdef GB_DEBUG
+// GB_own_snapshot: records the shared arrays of a matrix that a method did
+// not claim with GB_own_matrix, so that an in-place write into one of them is
+// caught once the method is done (see GB_subassigner).  Only for GB_DEBUG.
+typedef struct
+{
+    const void *block [5] ;     // shared, unclaimed blocks (p,h,b,i,x) or NULL
+    uint64_t mem [5] ;          // their A->c_mem words
+    uint64_t nbytes [5] ;       // # of live bytes of each
+    uint64_t hash [5] ;         // hash of the live bytes when recorded
+}
+GB_own_snapshot ;
+
+void GB_own_snapshot_take   // record the shared arrays not in which
+(
+    GB_own_snapshot *snap,
+    GrB_Matrix A,
+    int which               // the arrays claimed by GB_own_matrix
+) ;
+
+void GB_own_snapshot_check  // assert that no recorded array was written
+(
+    const GB_own_snapshot *snap,
+    GrB_Matrix A
+) ;
+#endif
+
 void GB_array_realloc       // reallocate an owned block (copied if shared)
 (
     // input/output:

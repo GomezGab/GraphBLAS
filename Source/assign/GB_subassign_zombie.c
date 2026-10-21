@@ -74,6 +74,9 @@ GrB_Info GB_subassign_zombie
     // get inputs
     //--------------------------------------------------------------------------
 
+    // zombies are created in C->i in place, so C must own it
+    GB_OK (GB_own_matrix (C, GB_OWN_I, GB_Context_nthreads_max ( ))) ;
+
     ASSERT (S->type == GrB_UINT32 || S->type == GrB_UINT64) ;
     const bool Sx_is_32 = (S->type->code == GB_UINT32_code) ;
     GB_MDECL (Sx, const, u) ;
