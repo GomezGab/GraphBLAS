@@ -71,3 +71,4 @@ cmake-build-debug/
 # Do not ignore this file
 !.gitignore
 
+build_debug/
