@@ -17,13 +17,8 @@ void GB_hy_free                 // free A-h and A->Y of a matrix
 
     if (A != NULL)
     {
-        // free A->h unless it is shallow
-        if (!A->h_shallow)
-        { 
-            GB_FREE_MEMORY (&(A->h), A->h_mem) ;
-        }
-        A->h = NULL ; A->h_mem = 0 ;
-        A->h_shallow = false ;
+        // release A->h (freed only if not shallow or shared)
+        GB_array_release (GB_SLOT (A, h)) ;
         GB_hyper_hash_free (A) ;
     }
 }

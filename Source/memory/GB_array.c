@@ -15,7 +15,7 @@
 // GB_array_hdr_new: allocate a header for a block
 //------------------------------------------------------------------------------
 
-static GB_array_hdr *GB_array_hdr_new   // the new header, or NULL if failed
+GB_array_hdr *GB_array_hdr_new      // the new header, or NULL if failed
 (
     uint64_t block_mem      // memsize and arena of the block
 )
@@ -42,7 +42,7 @@ static GB_array_hdr *GB_array_hdr_new   // the new header, or NULL if failed
 // matrix (C->p = Cp ; C->p_mem = Cp_mem).  On failure the block is not freed;
 // the caller still owns it and must free it.
 
-bool GB_array_adopt         // true if successful, false if out of memory
+GrB_Info GB_array_adopt     // GrB_SUCCESS, or GrB_OUT_OF_MEMORY
 (
     // input/output:
     void **p, uint64_t *mem, bool *shallow,     // slot to set; absent on input
@@ -52,23 +52,59 @@ bool GB_array_adopt         // true if successful, false if out of memory
 )
 {
     ASSERT ((*p) == NULL) ;
+    GB_array_spare_free (p, mem, shallow) ;
     if (block == NULL)
     {
         // nothing to adopt
         GB_array_clear (p, mem, shallow) ;
-        return (true) ;
+        return (GrB_SUCCESS) ;
     }
     GB_array_hdr *hdr = GB_array_hdr_new (block_mem) ;
     if (hdr == NULL)
     {
         // out of memory; the caller still owns the block
         GB_array_clear (p, mem, shallow) ;
-        return (false) ;
+        return (GrB_OUT_OF_MEMORY) ;
     }
     (*p) = block ;
     (*mem) = (uint64_t) (uintptr_t) hdr ;
     (*shallow) = false ;
-    return (true) ;
+    return (GrB_SUCCESS) ;
+}
+
+//------------------------------------------------------------------------------
+// GB_array_spare_take: take a header from a slot for reuse by GB_array_load
+//------------------------------------------------------------------------------
+
+// If the slot holds a spare header, it is returned.  If the slot holds a
+// block with a single owner, the block is freed (the caller is about to
+// discard the slot's content anyway) and its header is returned.  Otherwise
+// NULL is returned and the slot is unchanged.
+
+GB_array_hdr *GB_array_spare_take   // the spare header of a slot, or NULL
+(
+    // input/output:
+    void **p, uint64_t *mem, bool *shallow
+)
+{
+    GB_array_hdr *spare = GB_array_spare_get (*p, *mem, *shallow) ;
+    if (spare != NULL)
+    {
+        (*mem) = 0 ;
+        return (spare) ;
+    }
+    GB_array_hdr *hdr = GB_array_hdr_get (*p, *mem, *shallow) ;
+    if (hdr != NULL && GB_array_refs (*p, *mem, *shallow) == 1)
+    {
+        // the slot owns its block exclusively: free the block, keep the header
+        uint64_t block_mem = hdr->mem ;
+        GB_FREE_MEMORY (p, block_mem) ;
+        hdr->mem = 0 ;
+        hdr->refs = 0 ;
+        GB_array_clear (p, mem, shallow) ;
+        return (hdr) ;
+    }
+    return (NULL) ;
 }
 
 //------------------------------------------------------------------------------
@@ -94,7 +130,7 @@ void *GB_array_malloc       // pointer to the new block, or NULL if failed
     ASSERT ((*p) == NULL) ;
     uint64_t block_mem = GB_mem (arena, 0) ;
     void *block = GB_MALLOC_MEMORY (nitems, size_of_item, &block_mem) ;
-    if (!GB_array_adopt (p, mem, shallow, block, block_mem))
+    if (GB_array_adopt (p, mem, shallow, block, block_mem) != GrB_SUCCESS)
     {
         // out of memory
         GB_FREE_MEMORY (&block, block_mem) ;
@@ -116,7 +152,7 @@ void *GB_array_calloc       // pointer to the new block, or NULL if failed
     ASSERT ((*p) == NULL) ;
     uint64_t block_mem = GB_mem (arena, 0) ;
     void *block = GB_CALLOC_MEMORY (nitems, size_of_item, &block_mem) ;
-    if (!GB_array_adopt (p, mem, shallow, block, block_mem))
+    if (GB_array_adopt (p, mem, shallow, block, block_mem) != GrB_SUCCESS)
     {
         // out of memory
         GB_FREE_MEMORY (&block, block_mem) ;
@@ -141,7 +177,7 @@ void *GB_array_xalloc       // pointer to the new block, or NULL if failed
     uint64_t block_mem = GB_mem (arena, 0) ;
     void *block = GB_XALLOC_MEMORY (use_calloc, iso, nentries, sizeof_entry,
         &block_mem) ;
-    if (!GB_array_adopt (p, mem, shallow, block, block_mem))
+    if (GB_array_adopt (p, mem, shallow, block, block_mem) != GrB_SUCCESS)
     {
         // out of memory
         GB_FREE_MEMORY (&block, block_mem) ;
@@ -227,7 +263,49 @@ GrB_Info GB_array_own       // GrB_SUCCESS or GrB_OUT_OF_MEMORY
 }
 
 //------------------------------------------------------------------------------
-// GB_array_realloc: reallocate an owned, unshared block
+// GB_own_matrix: make every shared array of a matrix private
+//------------------------------------------------------------------------------
+
+// Called before a matrix is modified in place (setElement, assign, in-place
+// apply or mxm, unjumble, ...).  Each array that is shared with another
+// matrix (after GrB_dup, or an internal share) is copied in full, so the other
+// owners never see the modification.  Arrays with a single owner are left as
+// they are, so this is O(1) in the common case.  Borrowed (shallow) arrays
+// are also left as they are, to preserve the existing shallow semantics.
+
+GrB_Info GB_own_matrix      // GrB_SUCCESS or GrB_OUT_OF_MEMORY
+(
+    // input/output:
+    GrB_Matrix A,           // matrix about to be modified in place
+    // input:
+    int which,              // any combination of GB_OWN_P, ..., GB_OWN_X
+    int nthreads            // # of threads to use for the copies
+)
+{
+    if (A == NULL)
+    {
+        return (GrB_SUCCESS) ;
+    }
+    int arena = A->data_arena ;
+    GrB_Info info ;
+    #define GB_OWN_SLOT(c,flag)                                             \
+    if ((which & flag) && GB_array_is_shared (GB_CSLOT (A, c)))             \
+    {                                                                       \
+        info = GB_array_own (GB_SLOT (A, c), GB_array_memsize (GB_CSLOT (A, c)),\
+            arena, nthreads) ;                                              \
+        if (info != GrB_SUCCESS) return (info) ;                            \
+    }
+    GB_OWN_SLOT (p, GB_OWN_P) ;
+    GB_OWN_SLOT (h, GB_OWN_H) ;
+    GB_OWN_SLOT (b, GB_OWN_B) ;
+    GB_OWN_SLOT (i, GB_OWN_I) ;
+    GB_OWN_SLOT (x, GB_OWN_X) ;
+    #undef GB_OWN_SLOT
+    return (GrB_SUCCESS) ;
+}
+
+//------------------------------------------------------------------------------
+// GB_array_realloc: reallocate an owned block (copied first if shared)
 //------------------------------------------------------------------------------
 
 // Replaces GB_REALLOC_MEMORY (A->c, n, size, &(A->c_mem), &ok).  The slot
@@ -257,6 +335,18 @@ void GB_array_realloc       // reallocate an owned, unshared block
     }
 
     ASSERT (!(*shallow)) ;
+    if (GB_array_is_shared (*p, *mem, *shallow))
+    {
+        // the block is shared with another matrix: take a private copy first
+        GrB_Info info = GB_array_own (p, mem, shallow,
+            GB_array_memsize (*p, *mem, *shallow), arena,
+            GB_Context_nthreads_max ( )) ;
+        if (info != GrB_SUCCESS)
+        {
+            (*ok) = false ;
+            return ;
+        }
+    }
     GB_array_hdr *hdr = (GB_array_hdr *) (uintptr_t) (*mem) ;
     ASSERT (GB_array_refs (*p, *mem, *shallow) == 1) ;
 
@@ -292,23 +382,48 @@ void GB_array_load          // load a block that came from the user
     uint64_t block_mem,     // its memsize and arena, GB_mem encoding
     bool readonly,          // if true, borrow; else take ownership
     bool add_to_memtable,   // if true, add to the debug memtable
+    GB_array_hdr *spare,    // header to reuse, or NULL; always consumed
     // output:
     bool *ok                // true if successful, false if out of memory
 )
 {
     ASSERT ((*p) == NULL) ;
+    GB_array_spare_free (p, mem, shallow) ;
     (*ok) = true ;
-    if (block == NULL)
+    if (block == NULL || readonly)
     {
-        GB_array_clear (p, mem, shallow) ;
+        // absent or borrowed: no header is needed
+        if (spare != NULL)
+        {
+            uint64_t hdr_mem = spare->hdr_mem ;
+            GB_FREE_MEMORY (&spare, hdr_mem) ;
+        }
+        if (block == NULL)
+        {
+            GB_array_clear (p, mem, shallow) ;
+        }
+        else
+        {
+            GB_array_borrow (p, mem, shallow, block, block_mem) ;
+        }
     }
-    else if (readonly)
+    else if (spare != NULL)
     {
-        GB_array_borrow (p, mem, shallow, block, block_mem) ;
+        // take ownership using the spare header: this cannot fail
+        spare->mem = block_mem ;
+        spare->refs = 1 ;
+        (*p) = block ;
+        (*mem) = (uint64_t) (uintptr_t) spare ;
+        (*shallow) = false ;
+        if (add_to_memtable)
+        {
+            GB_Global_memtable_add (block, block_mem) ;
+        }
     }
     else
     {
-        (*ok) = GB_array_adopt (p, mem, shallow, block, block_mem) ;
+        (*ok) = (GB_array_adopt (p, mem, shallow, block, block_mem)
+            == GrB_SUCCESS) ;
         if (*ok && add_to_memtable)
         {
             GB_Global_memtable_add (block, block_mem) ;
@@ -337,18 +452,28 @@ GrB_Info GB_array_unload    // GrB_SUCCESS or GrB_OUT_OF_MEMORY
     uint64_t *block_mem,    // its memsize and arena, GB_mem encoding
     bool *readonly,         // true if the block was borrowed
     // input:
-    int nthreads            // # of threads to use if a copy is needed
+    int nthreads,           // # of threads to use if a copy is needed
+    bool to_user,           // true: the block leaves GraphBLAS (it is removed
+                            // from the debug memtable); false: it becomes
+                            // internal workspace still freed by GB_FREE_MEMORY
+    // output:
+    GB_array_hdr **spare    // if non-NULL, the detached header is returned
+                            // here (or NULL) instead of being freed
 )
 {
 
     (*block) = NULL ;
     (*block_mem) = 0 ;
     (*readonly) = false ;
+    if (spare != NULL)
+    {
+        (*spare) = NULL ;
+    }
 
     if ((*p) == NULL)
     {
-        // absent: nothing to unload
-        GB_array_clear (p, mem, shallow) ;
+        // absent: nothing to unload (a spare header, if any, is freed)
+        GB_array_release (p, mem, shallow) ;
         return (GrB_SUCCESS) ;
     }
 
@@ -377,9 +502,22 @@ GrB_Info GB_array_unload    // GrB_SUCCESS or GrB_OUT_OF_MEMORY
     ASSERT (hdr->refs == 1) ;
     (*block) = (*p) ;
     (*block_mem) = hdr->mem ;
-    uint64_t hdr_mem = hdr->hdr_mem ;
-    GB_Global_memtable_remove (*block) ;
-    GB_FREE_MEMORY (&hdr, hdr_mem) ;
+    if (to_user)
+    {
+        GB_Global_memtable_remove (*block) ;
+    }
+    if (spare != NULL)
+    {
+        // hand the header back to the caller for reuse
+        hdr->mem = 0 ;
+        hdr->refs = 0 ;
+        (*spare) = hdr ;
+    }
+    else
+    {
+        uint64_t hdr_mem = hdr->hdr_mem ;
+        GB_FREE_MEMORY (&hdr, hdr_mem) ;
+    }
     GB_array_clear (p, mem, shallow) ;
     return (GrB_SUCCESS) ;
 }

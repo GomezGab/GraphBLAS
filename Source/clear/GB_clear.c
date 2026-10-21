@@ -49,7 +49,6 @@ GrB_Info GB_clear           // clear a matrix, type and dimensions unchanged
     ASSERT (GB_PENDING_OK (A)) ;
 
     int data_arena = A->data_arena ;
-    uint64_t mem = GB_mem (data_arena, 0) ;
 
     //--------------------------------------------------------------------------
     // clear the content of A if bitmap
@@ -61,7 +60,25 @@ GrB_Info GB_clear           // clear a matrix, type and dimensions unchanged
         && GB_IS_BITMAP (A))
     { 
         // A should remain bitmap
-        GB_memset (A->b, 0, GB_nnz_held (A), nthreads_max) ;
+        if (GB_array_is_shared (GB_CSLOT (A, b)))
+        {
+            // A->b is shared with another matrix: replace it with a new,
+            // all-zero bitmap rather than clearing the shared one in place
+            int64_t anz_held = GB_nnz_held (A) ;
+            GB_array_release (GB_SLOT (A, b)) ;
+            A->b = GB_array_calloc (GB_SLOT (A, b), anz_held, sizeof (int8_t),
+                data_arena) ;
+            if (A->b == NULL)
+            {
+                // out of memory
+                GB_phybix_free (A) ;
+                return (GrB_OUT_OF_MEMORY) ;
+            }
+        }
+        else
+        {
+            GB_memset (A->b, 0, GB_nnz_held (A), nthreads_max) ;
+        }
         A->nvals = 0 ;
         A->magic = GB_MAGIC ;
         return (GrB_SUCCESS) ;
@@ -109,8 +126,7 @@ GrB_Info GB_clear           // clear a matrix, type and dimensions unchanged
         int64_t plen = A->vdim ;
         A->nvec = plen ;
         A->plen = plen ;
-        A->p_mem = mem ;
-        A->p = GB_MALLOC_MEMORY (plen+1, apsize, &(A->p_mem)) ;
+        A->p = GB_array_malloc (GB_SLOT (A, p), plen+1, apsize, data_arena) ;
         ASSERT (A->h == NULL) ;
         if (A->p == NULL)
         { 
@@ -131,10 +147,8 @@ GrB_Info GB_clear           // clear a matrix, type and dimensions unchanged
         int64_t plen = GB_IMIN (1, A->vdim) ;
         A->nvec = 0 ;
         A->plen = plen ;
-        A->p_mem = mem ;
-        A->h_mem = mem ;
-        A->p = GB_CALLOC_MEMORY (plen+1, apsize, &(A->p_mem)) ;
-        A->h = GB_CALLOC_MEMORY (plen  , ajsize, &(A->h_mem)) ;
+        A->p = GB_array_calloc (GB_SLOT (A, p), plen+1, apsize, data_arena) ;
+        A->h = GB_array_calloc (GB_SLOT (A, h), plen  , ajsize, data_arena) ;
         if (A->p == NULL || A->h == NULL)
         { 
             // out of memory

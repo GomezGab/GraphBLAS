@@ -33,7 +33,6 @@ GrB_Info GB_extractTuples_prep
     }
 
     int data_arena = V->data_arena ;
-    uint64_t mem = GB_mem (data_arena, 0) ;
 
     //--------------------------------------------------------------------------
     // quick return if V already has the right properties
@@ -42,7 +41,8 @@ GrB_Info GB_extractTuples_prep
     uint64_t required_memsize = nvals * vtype->size ;
     if (GB_IS_FULL (V) && V->nvals == nvals && V->vlen == nvals &&
         V->type == vtype && !(V->x_shallow) &&
-        GB_memsize (V->x_mem) >= required_memsize)
+        !GB_array_is_shared (GB_CSLOT (V, x)) &&
+        GB_array_memsize (GB_CSLOT (V, x)) >= required_memsize)
     { 
         // nothing to do; the vector is already in the right format
         return (GrB_SUCCESS) ;
@@ -52,25 +52,31 @@ GrB_Info GB_extractTuples_prep
     // remove V->x and free all other content
     //--------------------------------------------------------------------------
 
-    void *Vx = V->x_shallow ? NULL : V->x ;
-    uint64_t Vx_mem = V->x_shallow ? mem : V->x_mem ;
-    V->x = NULL ;
+    // take V->x out of V (unless borrowed) so it is not freed, then free the
+    // rest of V
+    void *Vx = NULL ; uint64_t Vx_mem = 0 ; bool Vx_shallow = false ;
+    if (!V->x_shallow)
+    {
+        GB_array_move (GB_VSLOT (Vx), GB_SLOT (V, x)) ;
+    }
     GB_phybix_free ((GrB_Matrix) V) ;
+    uint64_t Vx_memsize = GB_array_memsize (Vx, Vx_mem, Vx_shallow) ;
 
     //--------------------------------------------------------------------------
     // ensure Vx is large enough
     //--------------------------------------------------------------------------
 
-    if (required_memsize > GB_memsize (Vx_mem))
-    { 
-        // If Vx is not large enough, reallocate it.  If Vx was initially not
-        // empty, it means the space is growing incrementally, so add 25% extra
-        // space for future growth.
-        GB_FREE_MEMORY (&Vx, Vx_mem) ;
-        int64_t n = nvals + ((GB_memsize (Vx_mem) == 0) ? 0 : (nvals / 4)) ;
-        Vx = GB_MALLOC_MEMORY (n, vtype->size, &Vx_mem) ;
+    if (required_memsize > Vx_memsize || GB_array_is_shared (Vx, Vx_mem,
+        Vx_shallow))
+    {
+        // If Vx is not large enough (or is shared with another matrix),
+        // reallocate it.  If Vx was initially not empty, it means the space
+        // is growing incrementally, so add 25% extra space for future growth.
+        GB_array_release (GB_VSLOT (Vx)) ;
+        int64_t n = nvals + ((Vx_memsize == 0) ? 0 : (nvals / 4)) ;
+        Vx = GB_array_malloc (GB_VSLOT (Vx), n, vtype->size, data_arena) ;
         if (Vx == NULL)
-        { 
+        {
             return (GrB_OUT_OF_MEMORY) ;
         }
     }
@@ -79,7 +85,7 @@ GrB_Info GB_extractTuples_prep
     // load Vx back, to create V as a dense nvals-by-1 vector of type vtype
     //--------------------------------------------------------------------------
 
-    GB_vector_load (V, &Vx, vtype, nvals, Vx_mem, false) ;
+    GB_vector_load (V, GB_VSLOT (Vx), vtype, nvals) ;
     ASSERT_VECTOR_OK (V, "V prepped", GB0) ;
     return (GrB_SUCCESS) ;
 }

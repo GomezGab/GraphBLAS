@@ -10,9 +10,9 @@
 #define GB_FREE_ALL                 \
 {                                   \
     GB_phybix_free (C) ;            \
-    GB_FREE_MEMORY (&Cp, Cp_mem) ;  \
-    GB_FREE_MEMORY (&Ch, Ch_mem) ;  \
-    GB_FREE_MEMORY (&Ci, Ci_mem) ;  \
+    GB_array_release (GB_VSLOT (Cp)) ;  \
+    GB_array_release (GB_VSLOT (Ch)) ;  \
+    GB_array_release (GB_VSLOT (Ci)) ;  \
 }
 
 #include "mxm/GB_mxm.h"
@@ -42,7 +42,6 @@ GrB_Info GB_bitmap_expand_to_hyper
     ASSERT_MATRIX_OK (B, "B for expand C from bitmap/full to hyper", GB0) ;
 
     int data_arena = C->data_arena ;
-    uint64_t mem = GB_mem (data_arena, 0) ;
 
     GB_Ah_DECLARE (Ah, const) ; GB_Ah_PTR (Ah, A) ;
 
@@ -73,16 +72,16 @@ GrB_Info GB_bitmap_expand_to_hyper
     GB_Type_code cjcode = (Cj_is_32  ) ? GB_UINT32_code : GB_UINT64_code ;
     GB_Type_code bjcode = (B->j_is_32) ? GB_UINT32_code : GB_UINT64_code ;
 
-    GB_MDECL (Cp, , u) ; uint64_t Cp_mem = mem ;
-    GB_MDECL (Ci, , u) ; uint64_t Ci_mem = mem ;
-    void *Ch = NULL ; uint64_t Ch_mem = mem ;
+    GB_MDECL (Cp, , u) ; uint64_t Cp_mem = 0 ; bool Cp_shallow = false ;
+    GB_MDECL (Ci, , u) ; uint64_t Ci_mem = 0 ; bool Ci_shallow = false ;
+    void *Ch = NULL ; uint64_t Ch_mem = 0 ; bool Ch_shallow = false ;
 
-    Cp = GB_MALLOC_MEMORY (cvdim+1, cpsize, &Cp_mem) ;
+    Cp = GB_array_malloc (GB_VSLOT (Cp), cvdim+1, cpsize, data_arena) ;
     if (B_is_hyper)
-    { 
-        Ch = GB_MALLOC_MEMORY (cvdim, cjsize, &Ch_mem) ;
+    {
+        Ch = GB_array_malloc (GB_VSLOT (Ch), cvdim, cjsize, data_arena) ;
     }
-    Ci = GB_MALLOC_MEMORY (cnz, cisize, &Ci_mem) ;
+    Ci = GB_array_malloc (GB_VSLOT (Ci), cnz, cisize, data_arena) ;
     if (Cp == NULL || (B_is_hyper && Ch == NULL) || Ci == NULL)
     { 
         // out of memory
@@ -188,9 +187,9 @@ GrB_Info GB_bitmap_expand_to_hyper
     // transplant the new content and finalize C
     //--------------------------------------------------------------------------
 
-    C->p = Cp ; Cp = NULL ; C->p_mem = Cp_mem ;
-    C->h = Ch ; Ch = NULL ; C->h_mem = Ch_mem ;
-    C->i = Ci ; Ci = NULL ; C->i_mem = Ci_mem ;
+    GB_array_move (GB_SLOT (C, p), GB_VSLOT (Cp)) ;
+    GB_array_move (GB_SLOT (C, h), GB_VSLOT (Ch)) ;
+    GB_array_move (GB_SLOT (C, i), GB_VSLOT (Ci)) ;
     C->nzombies = (C_is_bitmap) ? (cnz - C->nvals) : 0 ;
     C->vdim = cvdim_final ;
     C->vlen = cvlen_final ;
@@ -204,7 +203,7 @@ GrB_Info GB_bitmap_expand_to_hyper
     C->i_is_32 = Ci_is_32 ;
 
     // free the bitmap, if present
-    GB_FREE_MEMORY ((&C->b), C->b_mem) ;
+    GB_array_release (GB_SLOT (C, b)) ;
 
     // C is now sparse or hypersparse
     ASSERT_MATRIX_OK (C, "C expanded from bitmap/full to hyper", GB0) ;

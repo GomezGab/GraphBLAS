@@ -14,8 +14,8 @@
 #define GB_FREE_ALL                         \
 {                                           \
     GB_Matrix_free (&T) ;                   \
-    GB_FREE_MEMORY (&Ax_new, Ax_new_mem) ;  \
-    GB_FREE_MEMORY (&Ab_new, Ab_new_mem) ;  \
+    GB_array_release (GB_VSLOT (Ax_new)) ;  \
+    GB_array_release (GB_VSLOT (Ab_new)) ;  \
     GB_phybix_free (A) ;                    \
 }
 
@@ -41,10 +41,11 @@ GrB_Info GB_resize              // change the size of a matrix
     ASSERT (A != NULL) ;
 
     int data_arena = A->data_arena ;
-    uint64_t mem = GB_mem (data_arena, 0) ;
 
-    GB_void *restrict Ax_new = NULL ; uint64_t Ax_new_mem = mem ;
-    int8_t  *restrict Ab_new = NULL ; uint64_t Ab_new_mem = mem ;
+    GB_void *restrict Ax_new = NULL ; uint64_t Ax_new_mem = 0 ;
+    bool Ax_new_shallow = false ;
+    int8_t  *restrict Ab_new = NULL ; uint64_t Ab_new_mem = 0 ;
+    bool Ab_new_shallow = false ;
     ASSERT_MATRIX_OK (A, "A to resize", GB0) ;
 
     GrB_Matrix T = NULL ;
@@ -175,13 +176,15 @@ GrB_Info GB_resize              // change the size of a matrix
             if (in_place)
             { 
                 // reallocate A->x in-place; no data movement needed
-                GB_REALLOC_MEMORY (A->x, nzmax_new, asize, &(A->x_mem), &ok) ;
+                GB_array_realloc (GB_SLOT (A, x), nzmax_new, asize,
+                    data_arena, &ok) ;
             }
             else
             { 
                 // allocate new space for A->x; use calloc to ensure all space
                 // is initialized.
-                Ax_new = GB_CALLOC_MEMORY (nzmax_new, asize, &Ax_new_mem) ;
+                Ax_new = GB_array_calloc (GB_VSLOT (Ax_new), nzmax_new, asize,
+                    data_arena) ;
                 ok = (Ax_new != NULL) ;
             }
         }
@@ -193,8 +196,8 @@ GrB_Info GB_resize              // change the size of a matrix
         if (!in_place && A_is_bitmap)
         { 
             // allocate new space for A->b
-            Ab_new = GB_MALLOC_MEMORY (nzmax_new, sizeof (int8_t),
-                &Ab_new_mem) ;
+            Ab_new = GB_array_malloc (GB_VSLOT (Ab_new), nzmax_new,
+                sizeof (int8_t), data_arena) ;
             ok = ok && (Ab_new != NULL) ;
         }
 
@@ -251,9 +254,8 @@ GrB_Info GB_resize              // change the size of a matrix
                         memcpy (pdest, psrc, vlen_new * asize) ;
                     }
                 }
-                GB_FREE_MEMORY (&Ax_old, A->x_mem) ;
-                A->x = Ax_new ; A->x_mem = Ax_new_mem ;
-                Ax_new = NULL ;
+                GB_array_release (GB_SLOT (A, x)) ;
+                GB_array_move (GB_SLOT (A, x), GB_VSLOT (Ax_new)) ;
             }
 
             //------------------------------------------------------------------
@@ -277,9 +279,8 @@ GrB_Info GB_resize              // change the size of a matrix
                     anvals += ab ;
                 }
                 A->nvals = anvals ;
-                GB_FREE_MEMORY (&Ab_old, A->b_mem) ;
-                A->b = Ab_new ; A->b_mem = Ab_new_mem ;
-                Ab_new = NULL ;
+                GB_array_release (GB_SLOT (A, b)) ;
+                GB_array_move (GB_SLOT (A, b), GB_VSLOT (Ab_new)) ;
             }
         }
 

@@ -9,6 +9,62 @@
 
 #include "GB.h"
 
+//------------------------------------------------------------------------------
+// GB_set_slot_arena: move one owned array of a matrix to a new arena
+//------------------------------------------------------------------------------
+
+// A borrowed array is left where it is (as before).  An owned array that is
+// shared with another matrix is not moved either: the copy made here would
+// be the only block in the new arena, so instead the block is copied into a
+// new, exclusively owned block in the new arena, and the old reference is
+// dropped.  An unshared block is moved with GB_set_arena, which reallocates
+// it in the new arena.
+
+static GrB_Info GB_set_slot_arena
+(
+    void **p, uint64_t *mem, bool *shallow,     // slot to move
+    const int new_arena,        // arena to move to
+    const uint64_t new_memsize, // new size of the block of memory
+    const uint64_t n,           // # of bytes that must be copied
+    const int nthreads          // max # of threads to use
+)
+{
+    if ((*p) == NULL || (*shallow))
+    {
+        // absent or borrowed: nothing to move
+        return (GrB_SUCCESS) ;
+    }
+    GB_array_hdr *hdr = (GB_array_hdr *) (uintptr_t) (*mem) ;
+    if (GB_arena (hdr->mem) == new_arena)
+    {
+        // already in the right arena
+        return (GrB_SUCCESS) ;
+    }
+    if (GB_array_refs (*p, *mem, *shallow) > 1)
+    {
+        // shared: copy the live bytes into a new block in the new arena
+        void *q = NULL ; uint64_t q_mem = 0 ; bool q_shallow = false ;
+        if (GB_array_malloc (GB_VSLOT (q), GB_IMAX (new_memsize, 1), 1,
+            new_arena) == NULL)
+        {
+            return (GrB_OUT_OF_MEMORY) ;
+        }
+        GB_memcpy (q, *p, n, nthreads) ;
+        GB_array_release (p, mem, shallow) ;
+        GB_array_move (p, mem, shallow, GB_VSLOT (q)) ;
+        return (GrB_SUCCESS) ;
+    }
+    // unshared: reallocate the block itself in the new arena
+    uint64_t block_mem = hdr->mem ;
+    GrB_Info info = GB_set_arena (p, &block_mem, new_arena, new_memsize, n,
+        nthreads) ;
+    if (info == GrB_SUCCESS)
+    {
+        hdr->mem = block_mem ;
+    }
+    return (info) ;
+}
+
 GrB_Info GB_set_arenas          // modify all arenas of a matrix
 (
     // input/output
@@ -70,35 +126,35 @@ GrB_Info GB_set_arenas          // modify all arenas of a matrix
     if (!A->p_shallow)
     { 
         n = (anvec+1) * psize ;
-        GB_OK (GB_set_arena (&(A->p), &(A->p_mem), new_data_arena, n, n,
+        GB_OK (GB_set_slot_arena (GB_SLOT (A, p), new_data_arena, n, n,
             nthreads)) ;
     }
 
     if (!A->h_shallow)
     { 
         n = anvec * jsize ;
-        GB_OK (GB_set_arena (&(A->h), &(A->h_mem), new_data_arena, n, n,
+        GB_OK (GB_set_slot_arena (GB_SLOT (A, h), new_data_arena, n, n,
             nthreads)) ;
     }
 
     if (!A->b_shallow)
     { 
         n = anz * sizeof (int8_t) ;
-        GB_OK (GB_set_arena ((void **) &(A->b), &(A->b_mem), new_data_arena,
+        GB_OK (GB_set_slot_arena (GB_SLOT (A, b), new_data_arena,
             n, n, nthreads)) ;
     }
 
     if (!A->i_shallow)
     { 
         n = anz * isize ;
-        GB_OK (GB_set_arena (&(A->i), &(A->i_mem), new_data_arena, n, n,
+        GB_OK (GB_set_slot_arena (GB_SLOT (A, i), new_data_arena, n, n,
             nthreads)) ;
     }
 
     if (!A->x_shallow)
     { 
         n = (A->iso ? 1:anz) * (A->type->size) ;
-        GB_OK (GB_set_arena (&(A->x), &(A->x_mem), new_data_arena, n, n,
+        GB_OK (GB_set_slot_arena (GB_SLOT (A, x), new_data_arena, n, n,
             nthreads)) ;
     }
 

@@ -103,6 +103,9 @@ GrB_Info GB_subassigner             // C(I,J)<#M> = A or accum (C (I,J), A)
     ASSERT (!GB_PENDING (A)) ;
     ASSERT (!GB_ZOMBIES (A)) ;
 
+    // all methods below modify C in place, so C must own its content
+    GB_OK (GB_own_matrix (C, GB_OWN_ALL, GB_Context_nthreads_max ( ))) ;
+
     //--------------------------------------------------------------------------
     // methods that rely on C and A being dense assume they are not jumbled
     //--------------------------------------------------------------------------

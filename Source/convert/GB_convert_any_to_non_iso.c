@@ -46,16 +46,13 @@ GrB_Info GB_convert_any_to_non_iso // convert iso matrix to non-iso
     anz = GB_IMAX (anz, 1) ;
     int64_t Ax_memsize_required = anz * asize ;
 
-    if (GB_memsize (A->x_mem) < Ax_memsize_required || A->x_shallow)
+    if (GB_array_memsize (GB_CSLOT (A, x)) < Ax_memsize_required
+        || A->x_shallow || GB_array_is_shared (GB_CSLOT (A, x)))
     {
-        if (!A->x_shallow)
-        { 
-            // free the old space
-            GB_FREE_MEMORY (&(A->x), A->x_mem) ;
-        }
+        // release the old space (freed unless it is shallow or shared)
+        GB_array_release (GB_SLOT (A, x)) ;
         // allocate the new space
-        A->x = GB_MALLOC_MEMORY (anz, asize, &(A->x_mem)) ;
-        A->x_shallow = false ;
+        A->x = GB_array_malloc (GB_SLOT (A, x), anz, asize, A->data_arena) ;
         if (A->x == NULL)
         { 
             // out of memory

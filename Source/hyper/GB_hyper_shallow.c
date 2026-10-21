@@ -52,10 +52,17 @@ GrB_Matrix GB_hyper_shallow         // return C
     C->Y_shallow = false ;
     C->no_hyper_hash = false ;  // C is sparse, this flag is not necessary
 
-    // flag all content of C as shallow
-    C->p_shallow = true ;
-    C->i_shallow = true ;
-    C->x_shallow = true ;
+    // all content of C is a borrowed view of A; the memcpy above copied the
+    // raw pointers and A's slot words, so re-establish each slot as borrowed
+    // (with a plain mem word, never A's header address)
+    GB_array_clear (GB_SLOT (C, p)) ;
+    GB_array_clear (GB_SLOT (C, h)) ;
+    GB_array_clear (GB_SLOT (C, i)) ;
+    GB_array_clear (GB_SLOT (C, x)) ;
+    GB_array_clear (GB_SLOT (C, b)) ;
+    GB_array_borrow_from (GB_SLOT (C, p), GB_CSLOT (A, p)) ;
+    GB_array_borrow_from (GB_SLOT (C, i), GB_CSLOT (A, i)) ;
+    GB_array_borrow_from (GB_SLOT (C, x), GB_CSLOT (A, x)) ;
 
     // C reduces in dimension to the # of vectors in A
     C->vdim = C->nvec ;

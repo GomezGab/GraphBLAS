@@ -42,22 +42,19 @@ GrB_Info GB_convert_any_to_iso // convert non-iso matrix to iso
     // compact the matrix
     //--------------------------------------------------------------------------
 
-    if (GB_memsize (A->x_mem) != asize || A->x_shallow || A->x == NULL)
+    if (GB_array_memsize (GB_CSLOT (A, x)) != asize || A->x_shallow
+        || GB_array_is_shared (GB_CSLOT (A, x)) || A->x == NULL)
     {
 
         //----------------------------------------------------------------------
-        // free the old A->x and allocate the new A->x
+        // release the old A->x and allocate the new A->x
         //----------------------------------------------------------------------
 
-        if (!A->x_shallow)
-        { 
-            // free the old space
-            GB_FREE_MEMORY (&(A->x), A->x_mem) ;
-        }
+        // the old A->x is freed unless it is shallow or shared
+        GB_array_release (GB_SLOT (A, x)) ;
 
         // allocate the new space
-        A->x = GB_MALLOC_MEMORY (1, asize, &(A->x_mem)) ;
-        A->x_shallow = false ;
+        A->x = GB_array_malloc (GB_SLOT (A, x), 1, asize, A->data_arena) ;
         if (A->x == NULL)
         { 
             // out of memory

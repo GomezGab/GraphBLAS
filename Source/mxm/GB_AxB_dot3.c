@@ -292,33 +292,28 @@ GrB_Info GB_AxB_dot3                // C<M> = A'*B using dot product method
     //--------------------------------------------------------------------------
 
     size_t cisize = (Ci_is_32) ? sizeof (uint32_t) : sizeof (uint64_t) ;
-    C->x_mem = mem ;
-    C->i_mem = mem ;
-
     if (sizeof (float) == sizeof (uint32_t) && Ci_is_32)
-    { 
+    {
         // transplant Cwork as C->i, and allocate just C->x
-        C->i = (void *) Cwork ;
-        C->i_mem = Cwork_mem ;
+        GB_OK (GB_array_adopt (GB_SLOT (C, i), (void *) Cwork, Cwork_mem)) ;
         Cwork = NULL ; Cwork_mem = 0 ;
-        C->x = GB_XALLOC_MEMORY (false, C_iso, cnz+1, C->type->size,
-            &(C->x_mem)) ;
+        C->x = GB_array_xalloc (GB_SLOT (C, x), false, C_iso, cnz+1,
+            C->type->size, data_arena) ;
     }
     else if (sizeof (float) == C->type->size && !C_iso)
-    { 
+    {
         // transplant Cwork as C->x, and allocate just C->i
-        C->i = GB_MALLOC_MEMORY (cnz+1, cisize, &(C->i_mem)) ;
-        C->x = (void *) Cwork ;
-        C->x_mem = Cwork_mem ;
+        C->i = GB_array_malloc (GB_SLOT (C, i), cnz+1, cisize, data_arena) ;
+        GB_OK (GB_array_adopt (GB_SLOT (C, x), (void *) Cwork, Cwork_mem)) ;
         Cwork = NULL ; Cwork_mem = 0 ;
     }
     else
-    { 
+    {
         // otherwise, free Cwork and allocate both C->i and C->x
         GB_FREE_MEMORY (&Cwork, Cwork_mem) ;
-        C->i = GB_MALLOC_MEMORY (cnz+1, cisize, &(C->i_mem)) ;
-        C->x = GB_XALLOC_MEMORY (false, C_iso, cnz+1, C->type->size,
-            &(C->x_mem)) ;
+        C->i = GB_array_malloc (GB_SLOT (C, i), cnz+1, cisize, data_arena) ;
+        C->x = GB_array_xalloc (GB_SLOT (C, x), false, C_iso, cnz+1,
+            C->type->size, data_arena) ;
     }
 
     // Cwork has either been transplanted into C as C->i or C->x, or it has

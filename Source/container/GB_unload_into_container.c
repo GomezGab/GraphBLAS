@@ -73,33 +73,27 @@ GrB_Info GB_unload_into_container   // GrB_Matrix -> GxB_Container
                 A->Y = NULL ;
             }
             // unload A->p, A->h, and A->i into the Container
-            GB_vector_load (Container->p, &(A->p),
-                A->p_is_32 ? GrB_UINT32 : GrB_UINT64,
-                A->nvec+1, A->p_mem, A->p_shallow) ;
-            GB_vector_load (Container->h, &(A->h),
-                A->j_is_32 ? GrB_INT32 : GrB_INT64,
-                A->nvec, A->h_mem, A->h_shallow) ;
-            GB_vector_load (Container->i, &(A->i),
-                A->i_is_32 ? GrB_INT32 : GrB_INT64,
-                nvals, A->i_mem, A->i_shallow) ;
+            GB_vector_load (Container->p, GB_SLOT (A, p),
+                A->p_is_32 ? GrB_UINT32 : GrB_UINT64, A->nvec+1) ;
+            GB_vector_load (Container->h, GB_SLOT (A, h),
+                A->j_is_32 ? GrB_INT32 : GrB_INT64, A->nvec) ;
+            GB_vector_load (Container->i, GB_SLOT (A, i),
+                A->i_is_32 ? GrB_INT32 : GrB_INT64, nvals) ;
             break ;
 
         case GxB_SPARSE : 
 
             // unload A->p and A->i into the Container
-            GB_vector_load (Container->p, &(A->p),
-                A->p_is_32 ? GrB_UINT32 : GrB_UINT64,
-                A->plen+1, A->p_mem, A->p_shallow) ;
-            GB_vector_load (Container->i, &(A->i),
-                A->i_is_32 ? GrB_INT32 : GrB_INT64,
-                nvals, A->i_mem, A->i_shallow) ;
+            GB_vector_load (Container->p, GB_SLOT (A, p),
+                A->p_is_32 ? GrB_UINT32 : GrB_UINT64, A->plen+1) ;
+            GB_vector_load (Container->i, GB_SLOT (A, i),
+                A->i_is_32 ? GrB_INT32 : GrB_INT64, nvals) ;
             break ;
 
         case GxB_BITMAP : 
 
             // unload A->b into the Container
-            GB_vector_load (Container->b, (void **) &(A->b), GrB_INT8,
-                nx, A->b_mem, A->b_shallow) ;
+            GB_vector_load (Container->b, GB_SLOT (A, b), GrB_INT8, nx) ;
             break ;
 
         case GxB_FULL : 
@@ -108,8 +102,7 @@ GrB_Info GB_unload_into_container   // GrB_Matrix -> GxB_Container
     }
 
     // unload A->x into the Container
-    GB_vector_load (Container->x, &(A->x), A->type, iso ? 1 : nx,
-        A->x_mem, A->x_shallow) ;
+    GB_vector_load (Container->x, GB_SLOT (A, x), A->type, iso ? 1 : nx) ;
 
     //--------------------------------------------------------------------------
     // change A to a dense 0-by-0 matrix with no content

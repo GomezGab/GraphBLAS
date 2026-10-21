@@ -39,13 +39,12 @@ GrB_Info GB_vector_unload
 (
     // input/output:
     GrB_Vector V,           // vector to unload
-    void **X,               // numerical array to unload from V
+    void **X,               // slot to receive V->x (see GB_array.h);
+    uint64_t *X_mem,        // must be absent on input
+    bool *X_shallow,
     // output:
     GrB_Type *type,         // type of X
     uint64_t *n,            // # of entries in X
-    uint64_t *X_mem,        // memsize of X in bytes (>= n*(sizeof the type))
-                            // and arena
-    bool *readonly,         // if true, X is treated as readonly
     GB_Werk Werk
 )
 {
@@ -61,9 +60,7 @@ GrB_Info GB_vector_unload
     GB_RETURN_IF_NULL (n) ;
     GB_RETURN_IF_NULL (X_mem) ;
     ASSERT_VECTOR_OK (V, "V to unload", GB0) ;
-    (*X) = NULL ;
-    (*X_mem) = 0 ;
-    (*readonly) = false ;
+    ASSERT ((*X) == NULL) ;
     (*n) = 0 ;
 
     //--------------------------------------------------------------------------
@@ -90,13 +87,10 @@ GrB_Info GB_vector_unload
     // unload the content from V into X
     //--------------------------------------------------------------------------
 
-    (*X) = V->x ;
     (*n) = V->vlen ;
-    (*X_mem) = V->x_mem ;       // including memsize and arena
     (*type) = V->type ;
-    (*readonly) = V->x_shallow  && (V->x != NULL) ;
-    V->x = NULL ; V->x_mem = 0 ;
-    V->x_shallow = false ;
+    // move V->x into the slot X; a borrowed (readonly) V->x stays borrowed
+    GB_array_move (X, X_mem, X_shallow, GB_SLOT (V, x)) ;
 
     //--------------------------------------------------------------------------
     // clear prior content of V, making V a dense GrB_Vector of length 0

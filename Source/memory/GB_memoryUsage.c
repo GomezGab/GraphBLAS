@@ -50,66 +50,66 @@ void GB_memoryUsage         // count # allocated blocks and their sizes
 
     if (A->p != NULL)
     {
-        if (A->p_shallow)
+        if (A->p_shallow || GB_array_is_shared (GB_CSLOT (A, p)))
         { 
-            (*mem_shallow) += GB_memsize (A->p_mem) ;
+            (*mem_shallow) += GB_array_memsize (GB_CSLOT (A, p)) ;
         }
         else
         { 
             (*nallocs)++ ;
-            (*mem_deep) += GB_memsize (A->p_mem) ;
+            (*mem_deep) += GB_array_memsize (GB_CSLOT (A, p)) ;
         }
     }
 
     if (A->h != NULL)
     {
-        if (A->h_shallow)
+        if (A->h_shallow || GB_array_is_shared (GB_CSLOT (A, h)))
         { 
-            (*mem_shallow) += GB_memsize (A->h_mem) ;
+            (*mem_shallow) += GB_array_memsize (GB_CSLOT (A, h)) ;
         }
         else
         { 
             (*nallocs)++ ;
-            (*mem_deep) += GB_memsize (A->h_mem) ;
+            (*mem_deep) += GB_array_memsize (GB_CSLOT (A, h)) ;
         }
     }
 
     if (A->b != NULL)
     {
-        if (A->b_shallow)
+        if (A->b_shallow || GB_array_is_shared (GB_CSLOT (A, b)))
         { 
-            (*mem_shallow) += GB_memsize (A->b_mem) ;
+            (*mem_shallow) += GB_array_memsize (GB_CSLOT (A, b)) ;
         }
         else
         { 
             (*nallocs)++ ;
-            (*mem_deep) += GB_memsize (A->b_mem) ;
+            (*mem_deep) += GB_array_memsize (GB_CSLOT (A, b)) ;
         }
     }
 
     if (A->i != NULL)
     {
-        if (A->i_shallow)
+        if (A->i_shallow || GB_array_is_shared (GB_CSLOT (A, i)))
         { 
-            (*mem_shallow) += GB_memsize (A->i_mem) ;
+            (*mem_shallow) += GB_array_memsize (GB_CSLOT (A, i)) ;
         }
         else
         { 
             (*nallocs)++ ;
-            (*mem_deep) += GB_memsize (A->i_mem) ;
+            (*mem_deep) += GB_array_memsize (GB_CSLOT (A, i)) ;
         }
     }
 
     if (A->x != NULL)
     {
-        if (A->x_shallow)
+        if (A->x_shallow || GB_array_is_shared (GB_CSLOT (A, x)))
         { 
-            (*mem_shallow) += GB_memsize (A->x_mem) ;
+            (*mem_shallow) += GB_array_memsize (GB_CSLOT (A, x)) ;
         }
         else
         { 
             (*nallocs)++ ;
-            (*mem_deep) += GB_memsize (A->x_mem) ;
+            (*mem_deep) += GB_array_memsize (GB_CSLOT (A, x)) ;
         }
     }
 

@@ -179,9 +179,9 @@ GB_CALLBACK_HYPER_HASH_BUILD_PROTO (GB_hyper_hash_build)
 
     ASSERT_MATRIX_OK (A, "A from hyper_hash", GB0) ;
     ASSERT (A->data_arena == A->Y->data_arena) ;
-    ASSERT (A->data_arena == GB_arena (A->Y->p_mem)) ;
-    ASSERT (A->data_arena == GB_arena (A->Y->i_mem)) ;
-    ASSERT (A->data_arena == GB_arena (A->Y->x_mem)) ;
+    ASSERT (A->data_arena == GB_array_arena (GB_CSLOT (A->Y, p))) ;
+    ASSERT (A->data_arena == GB_array_arena (GB_CSLOT (A->Y, i))) ;
+    ASSERT (A->data_arena == GB_array_arena (GB_CSLOT (A->Y, x))) ;
     ASSERT (!GB_ZOMBIES (Y)) ;
     ASSERT (!GB_JUMBLED (Y)) ;
     ASSERT (!GB_PENDING (Y)) ;

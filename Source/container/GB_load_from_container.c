@@ -107,30 +107,34 @@ GrB_Info GB_load_from_container // GxB_Container -> GrB_Matrix
             // hypersparse: load A->p, A->h, A->Y, and A->i from the container
             //------------------------------------------------------------------
 
-            // load A->p
-            GB_OK (GB_vector_unload (Container->p, &(A->p), &Ap_type,
-                &plen1, &(A->p_mem), &(A->p_shallow), Werk)) ;
+            // load A->p.  GB_vector_unload moves the array out of the
+            // container vector as it is: a shared array stays shared and a
+            // readonly one stays readonly.  No ownership is claimed and
+            // nothing is copied (contrast with GxB_Vector_unload, which must
+            // hand the user an exclusively owned array).
+            GB_OK (GB_vector_unload (Container->p, GB_SLOT (A, p), &Ap_type,
+                &plen1, Werk)) ;
             ok = GB_type_ok (Ap_type) ;
 
             // load or create A->h
             if (h_empty)
-            { 
+            {
                 // A is an empty hypersparse matrix but A->h must not be NULL;
                 // allocate space for A->h of type Ah_type for a single entry
                 // Ah_type is uint32 or uint64, so sizeof (uint64_t) is fine.
                 plen = 0 ;
-                A->h = GB_CALLOC_MEMORY (1, sizeof (uint64_t), &(A->h_mem)) ;
+                A->h = GB_array_calloc (GB_SLOT (A, h), 1, sizeof (uint64_t),
+                    A->data_arena) ;
                 if (A->h == NULL)
-                { 
+                {
                     GB_FREE_ALL ;
                     return (GrB_OUT_OF_MEMORY) ;
                 }
-                A->h_shallow = false ;
             }
             else
-            { 
-                GB_OK (GB_vector_unload (Container->h, &(A->h), &Ah_type,
-                    &plen, &(A->h_mem), &(A->h_shallow), Werk)) ;
+            {
+                GB_OK (GB_vector_unload (Container->h, GB_SLOT (A, h),
+                    &Ah_type, &plen, Werk)) ;
             }
             ok = ok && GB_type_ok (Ah_type) ;
 
@@ -142,8 +146,8 @@ GrB_Info GB_load_from_container // GxB_Container -> GrB_Matrix
             GB_vector_reset (Container->b) ;
 
             // load A->i
-            GB_OK (GB_vector_unload (Container->i, &(A->i), &Ai_type,
-                &Ai_len, &(A->i_mem), &(A->i_shallow), Werk)) ;
+            GB_OK (GB_vector_unload (Container->i, GB_SLOT (A, i), &Ai_type,
+                &Ai_len, Werk)) ;
             ok = ok && GB_type_ok (Ai_type) ;
 
             // define plen, nvec, and jumbled
@@ -167,8 +171,8 @@ GrB_Info GB_load_from_container // GxB_Container -> GrB_Matrix
             //------------------------------------------------------------------
 
             // load A->p
-            GB_OK (GB_vector_unload (Container->p, &(A->p), &Ap_type,
-                &plen1, &(A->p_mem), &(A->p_shallow), Werk)) ;
+            GB_OK (GB_vector_unload (Container->p, GB_SLOT (A, p), &Ap_type,
+                &plen1, Werk)) ;
             ok = GB_type_ok (Ap_type) ;
 
             // clear Container->h, Y, and b
@@ -177,8 +181,8 @@ GrB_Info GB_load_from_container // GxB_Container -> GrB_Matrix
             GB_vector_reset (Container->b) ;
 
             // load A->i
-            GB_OK (GB_vector_unload (Container->i, &(A->i), &Ai_type,
-                &Ai_len, &(A->i_mem), &(A->i_shallow), Werk)) ;
+            GB_OK (GB_vector_unload (Container->i, GB_SLOT (A, i), &Ai_type,
+                &Ai_len, Werk)) ;
             ok = ok && GB_type_ok (Ai_type) ;
 
             // define plen, nvec, and jumbled
@@ -206,8 +210,8 @@ GrB_Info GB_load_from_container // GxB_Container -> GrB_Matrix
             GB_Matrix_free (&(Container->Y)) ;
 
             // load A->b
-            GB_OK (GB_vector_unload (Container->b, (void **) &(A->b), &Ab_type,
-                &Ab_len, &(A->b_mem), &(A->b_shallow), Werk)) ;
+            GB_OK (GB_vector_unload (Container->b, GB_SLOT (A, b), &Ab_type,
+                &Ab_len, Werk)) ;
 
             // clear Container->i
             GB_vector_reset (Container->i) ;
@@ -246,8 +250,8 @@ GrB_Info GB_load_from_container // GxB_Container -> GrB_Matrix
     }
 
     // load A->x
-    GB_OK (GB_vector_unload (Container->x, &(A->x), &(A->type),
-        &Ax_len, &(A->x_mem), &(A->x_shallow), Werk)) ;
+    GB_OK (GB_vector_unload (Container->x, GB_SLOT (A, x), &(A->type),
+        &Ax_len, Werk)) ;
 
     // define the integer types
     A->p_is_32 = (Ap_type == GrB_UINT32 || Ap_type == GrB_INT32) ;

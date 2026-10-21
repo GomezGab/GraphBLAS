@@ -34,13 +34,8 @@ void GB_phy_free                // free A->p, A->h, and A->Y of a matrix
     // free A->p, A->h, and A->Y
     //--------------------------------------------------------------------------
 
-    // free A->p unless it is shallow
-    if (!A->p_shallow)
-    { 
-        GB_FREE_MEMORY (&(A->p), A->p_mem) ;
-    }
-    A->p = NULL ; A->p_mem = 0 ;
-    A->p_shallow = false ;
+    // release A->p (freed only if not shallow or shared)
+    GB_array_release (GB_SLOT (A, p)) ;
 
     // free A->h and A->Y
     GB_hy_free (A) ;

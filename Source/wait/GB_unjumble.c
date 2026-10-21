@@ -44,6 +44,14 @@ GrB_Info GB_unjumble        // unjumble a matrix
     ASSERT (!GB_IS_BITMAP (A)) ;
     ASSERT (GB_IS_SPARSE (A) || GB_IS_HYPERSPARSE (A)) ;
 
+    // A->i and A->x are sorted in place: they must not be shared
+    GrB_Info info_own = GB_own_matrix (A, GB_OWN_I | GB_OWN_X,
+        GB_Context_nthreads_max ( )) ;
+    if (info_own != GrB_SUCCESS)
+    {
+        return (info_own) ;
+    }
+
     //--------------------------------------------------------------------------
     // get A
     //--------------------------------------------------------------------------

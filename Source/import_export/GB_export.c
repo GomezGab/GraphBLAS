@@ -22,8 +22,8 @@
 
 #define GB_FREE_ALL                         \
 {                                           \
-    GB_FREE_MEMORY (&Ap_new, Ap_new_mem) ;  \
-    GB_FREE_MEMORY (&Ah_new, Ah_new_mem) ;  \
+    GB_array_release (GB_VSLOT (Ap_new)) ;  \
+    GB_array_release (GB_VSLOT (Ah_new)) ;  \
 }
 
 GrB_Info GB_export      // export/unpack a matrix in any format
@@ -73,10 +73,12 @@ GrB_Info GB_export      // export/unpack a matrix in any format
     GrB_Info info ;
 
     int data_arena = GB_Context_data_arena ( ) ;
-    uint64_t mem = GB_mem (data_arena, 0) ;
+    int nthreads_max = GB_Context_nthreads_max ( ) ;
 
-    int64_t *Ap_new = NULL ; uint64_t Ap_new_mem = mem ;
-    int64_t *Ah_new = NULL ; uint64_t Ah_new_mem = mem ;
+    int64_t *Ap_new = NULL ; uint64_t Ap_new_mem = 0 ; bool Ap_new_shallow = 0 ;
+    int64_t *Ah_new = NULL ; uint64_t Ah_new_mem = 0 ; bool Ah_new_shallow = 0 ;
+    uint64_t X_mem_out ;        // mem word of each unloaded array
+    bool X_readonly ;           // always false: user matrices are never shallow
     ASSERT (A != NULL) ;
     GB_RETURN_IF_NULL (*A) ;
 
@@ -151,13 +153,13 @@ GrB_Info GB_export      // export/unpack a matrix in any format
     {
         plen_new = (avdim == 0) ? 0 : 1 ;
         nvec_new = (avdim == 1) ? 1 : 0 ;
-        Ap_new = GB_CALLOC_MEMORY (plen_new+1, sizeof (int64_t),
-            &(Ap_new_mem)) ;
+        Ap_new = GB_array_calloc (GB_VSLOT (Ap_new), plen_new+1,
+            sizeof (int64_t), data_arena) ;
         if (avdim > 1)
-        { 
+        {
             // A is sparse if avdim <= 1, hypersparse if avdim > 1
-            Ah_new = GB_CALLOC_MEMORY (1, sizeof (int64_t),
-                &(Ah_new_mem)) ;
+            Ah_new = GB_array_calloc (GB_VSLOT (Ah_new), 1, sizeof (int64_t),
+                data_arena) ;
         }
         if (Ap_new == NULL || (avdim > 1 && Ah_new == NULL))
         { 
@@ -199,11 +201,11 @@ GrB_Info GB_export      // export/unpack a matrix in any format
     (*vlen) = (*A)->vlen ;
     (*vdim) = avdim ;
 
-    // export A->x
-    GBMDUMP ("export A->x from memtable: %p\n", (*A)->x) ;
-    GB_Global_memtable_remove ((*A)->x) ;
-    (*Ax) = (*A)->x ; (*A)->x = NULL ;
-    (*Ax_memsize) = GB_memsize ((*A)->x_mem) ;
+    // export A->x (copied first if it is shared with another matrix)
+    GB_OK (GB_array_unload (GB_SLOT (*A, x), Ax, &X_mem_out, &X_readonly,
+        nthreads_max, true, NULL)) ;
+    ASSERT (!X_readonly) ;
+    (*Ax_memsize) = GB_memsize (X_mem_out) ;
 
     switch (s)
     {
@@ -211,10 +213,10 @@ GrB_Info GB_export      // export/unpack a matrix in any format
             (*nvec) = (*A)->nvec ;
 
             // export A->h
-            GBMDUMP ("export A->h from memtable: %p\n", (*A)->h) ;
-            GB_Global_memtable_remove ((*A)->h) ;
-            (*Ah) = (uint64_t *) ((*A)->h) ; (*A)->h = NULL ;
-            (*Ah_memsize) = GB_memsize ((*A)->h_mem) ;
+            GB_OK (GB_array_unload (GB_SLOT (*A, h), (void **) Ah, &X_mem_out,
+                &X_readonly, nthreads_max, true, NULL)) ;
+            ASSERT (!X_readonly) ;
+            (*Ah_memsize) = GB_memsize (X_mem_out) ;
             // fall through to the sparse case
 
         case GxB_SPARSE : 
@@ -231,27 +233,27 @@ GrB_Info GB_export      // export/unpack a matrix in any format
             }
             else
             { 
-                GBMDUMP ("export A->p from memtable: %p\n", (*A)->p) ;
-                GB_Global_memtable_remove ((*A)->p) ;
-                (*Ap) = (uint64_t *) ((*A)->p) ; (*A)->p = NULL ;
-                (*Ap_memsize) = GB_memsize ((*A)->p_mem) ;
+                GB_OK (GB_array_unload (GB_SLOT (*A, p), (void **) Ap,
+                    &X_mem_out, &X_readonly, nthreads_max, true, NULL)) ;
+                ASSERT (!X_readonly) ;
+                (*Ap_memsize) = GB_memsize (X_mem_out) ;
             }
 
             // export A->i
-            GBMDUMP ("export A->i from memtable: %p\n", (*A)->i) ;
-            GB_Global_memtable_remove ((*A)->i) ;
-            (*Ai) = (uint64_t *) ((*A)->i) ; (*A)->i = NULL ;
-            (*Ai_memsize) = GB_memsize ((*A)->i_mem) ;
+            GB_OK (GB_array_unload (GB_SLOT (*A, i), (void **) Ai, &X_mem_out,
+                &X_readonly, nthreads_max, true, NULL)) ;
+            ASSERT (!X_readonly) ;
+            (*Ai_memsize) = GB_memsize (X_mem_out) ;
             break ;
 
         case GxB_BITMAP : 
             (*nvals) = (*A)->nvals ;
 
             // export A->b
-            GBMDUMP ("export A->b from memtable: %p\n", (*A)->b) ;
-            GB_Global_memtable_remove ((*A)->b) ;
-            (*Ab) = (*A)->b ; (*A)->b = NULL ;
-            (*Ab_memsize) = GB_memsize ((*A)->b_mem) ;
+            GB_OK (GB_array_unload (GB_SLOT (*A, b), (void **) Ab, &X_mem_out,
+                &X_readonly, nthreads_max, true, NULL)) ;
+            ASSERT (!X_readonly) ;
+            (*Ab_memsize) = GB_memsize (X_mem_out) ;
 
         case GxB_FULL : 
 
@@ -280,8 +282,8 @@ GrB_Info GB_export      // export/unpack a matrix in any format
         GB_phybix_free (*A) ;
         (*A)->plen = plen_new ;
         (*A)->nvec = nvec_new ;
-        (*A)->p = Ap_new ; (*A)->p_mem = Ap_new_mem ;
-        (*A)->h = Ah_new ; (*A)->h_mem = Ah_new_mem ;
+        GB_array_move (GB_SLOT (*A, p), GB_VSLOT (Ap_new)) ;
+        GB_array_move (GB_SLOT (*A, h), GB_VSLOT (Ah_new)) ;
         (*A)->magic = GB_MAGIC ;
         (*A)->p_is_32 = false ;
         (*A)->j_is_32 = false ;

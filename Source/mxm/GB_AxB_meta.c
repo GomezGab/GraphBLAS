@@ -505,11 +505,23 @@ GrB_Info GB_AxB_meta                // C<M>=A*B meta algorithm
     {
         // C cannot be done in-place if it is aliased with any input matrix.
         // Also cannot compute C in-place if it is to be transposed.
-        bool C_aliased = GB_any_aliased (C_in, M) || GB_any_aliased (C_in, A) ||
-            GB_any_aliased (C_in, B) ;
-        if (C_transpose || C_aliased)
-        { 
+        if (C_transpose || C_in == M || C_in == A || C_in == B)
+        {
             can_do_in_place = false ;
+        }
+        if (can_do_in_place)
+        {
+            // C_in is modified in place, so it must own its content.  This
+            // also removes any sharing of its arrays with M, A, or B (from
+            // GrB_dup), so that the check below sees only true aliasing.
+            GB_OK (GB_own_matrix (C_in, GB_OWN_ALL,
+                GB_Context_nthreads_max ( ))) ;
+            bool C_aliased = GB_any_aliased (C_in, M) ||
+                GB_any_aliased (C_in, A) || GB_any_aliased (C_in, B) ;
+            if (C_aliased)
+            {
+                can_do_in_place = false ;
+            }
         }
         // todo: A and B can be transposed below, so this check should be
         // done after any such transposings.

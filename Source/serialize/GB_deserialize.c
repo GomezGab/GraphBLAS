@@ -19,6 +19,47 @@
     GB_Matrix_free (&C) ;                   \
 }
 
+//------------------------------------------------------------------------------
+// GB_deserialize_array: deserialize one array of C from the blob
+//------------------------------------------------------------------------------
+
+// The array is uncompressed into a raw block, which then becomes an owned
+// array slot of C (see GB_array.h).
+
+static GrB_Info GB_deserialize_array
+(
+    void **p, uint64_t *mem, bool *shallow,     // slot of C to fill
+    int64_t X_len,              // size of X in bytes
+    const GB_void *blob,        // serialized blob of size blob_memsize
+    uint64_t blob_memsize,
+    uint64_t *Sblocks,          // array of size nblocks
+    int32_t nblocks,            // # of compressed blocks for this array
+    int32_t method,             // compression method used for each block
+    const int data_arena,       // arena for workspace and output X
+    uint64_t *s_handle          // where to read from the blob
+)
+{
+    GB_void *X = NULL ;
+    uint64_t X_mem = 0 ;
+    GrB_Info info = GB_deserialize_from_blob (&X, &X_mem, X_len, blob,
+        blob_memsize, Sblocks, nblocks, method, data_arena, s_handle) ;
+    if (info != GrB_SUCCESS)
+    {
+        return (info) ;
+    }
+    info = GB_array_adopt (p, mem, shallow, X, X_mem) ;
+    if (info != GrB_SUCCESS)
+    { 
+        // out of memory
+        GB_FREE_MEMORY (&X, X_mem) ;
+    }
+    return (info) ;
+}
+
+//------------------------------------------------------------------------------
+// GB_deserialize
+//------------------------------------------------------------------------------
+
 GrB_Info GB_deserialize             // deserialize a matrix from a blob
 (
     // output:
@@ -203,15 +244,15 @@ GrB_Info GB_deserialize             // deserialize a matrix from a blob
     {
         case GxB_HYPERSPARSE : 
             // decompress Cp, Ch, and Ci
-            GB_OK (GB_deserialize_from_blob ((GB_void **) &(C->p), &(C->p_mem),
+            GB_OK (GB_deserialize_array (GB_SLOT (C, p),
                 Cp_len, blob, blob_memsize, Cp_Sblocks, Cp_nblocks, Cp_method,
                 data_arena, &s)) ;
 
-            GB_OK (GB_deserialize_from_blob ((GB_void **) &(C->h), &(C->h_mem),
+            GB_OK (GB_deserialize_array (GB_SLOT (C, h),
                 Ch_len, blob, blob_memsize, Ch_Sblocks, Ch_nblocks, Ch_method,
                 data_arena, &s)) ;
 
-            GB_OK (GB_deserialize_from_blob ((GB_void **) &(C->i), &(C->i_mem),
+            GB_OK (GB_deserialize_array (GB_SLOT (C, i),
                 Ci_len, blob, blob_memsize, Ci_Sblocks, Ci_nblocks, Ci_method,
                 data_arena, &s)) ;
             break ;
@@ -219,11 +260,11 @@ GrB_Info GB_deserialize             // deserialize a matrix from a blob
         case GxB_SPARSE : 
 
             // decompress Cp and Ci
-            GB_OK (GB_deserialize_from_blob ((GB_void **) &(C->p), &(C->p_mem),
+            GB_OK (GB_deserialize_array (GB_SLOT (C, p),
                 Cp_len, blob, blob_memsize, Cp_Sblocks, Cp_nblocks, Cp_method,
                 data_arena, &s)) ;
 
-            GB_OK (GB_deserialize_from_blob ((GB_void **) &(C->i), &(C->i_mem),
+            GB_OK (GB_deserialize_array (GB_SLOT (C, i),
                 Ci_len, blob, blob_memsize, Ci_Sblocks, Ci_nblocks, Ci_method,
                 data_arena, &s)) ;
             break ;
@@ -231,7 +272,7 @@ GrB_Info GB_deserialize             // deserialize a matrix from a blob
         case GxB_BITMAP : 
 
             // decompress Cb
-            GB_OK (GB_deserialize_from_blob ((GB_void **) &(C->b), &(C->b_mem),
+            GB_OK (GB_deserialize_array (GB_SLOT (C, b),
                 Cb_len, blob, blob_memsize, Cb_Sblocks, Cb_nblocks, Cb_method,
                 data_arena, &s)) ;
             break ;
@@ -242,7 +283,7 @@ GrB_Info GB_deserialize             // deserialize a matrix from a blob
     }
 
     // decompress Cx
-    GB_OK (GB_deserialize_from_blob ((GB_void **) &(C->x), &(C->x_mem), Cx_len,
+    GB_OK (GB_deserialize_array (GB_SLOT (C, x), Cx_len,
         blob, blob_memsize, Cx_Sblocks, Cx_nblocks, Cx_method, data_arena,
         &s)) ;
 

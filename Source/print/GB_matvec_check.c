@@ -397,15 +397,15 @@ GrB_Info GB_matvec_check    // check a GraphBLAS matrix or vector
     if (pr_short || pr_complete)
     {
         GBPR ("  ->h: %p shallow: %d size: " GBu " arena: %d\n",
-            A->h, A->h_shallow, GB_memsize (A->h_mem), GB_arena (A->h_mem)) ;
+            A->h, A->h_shallow, GB_array_memsize (GB_CSLOT (A, h)), GB_array_arena (GB_CSLOT (A, h))) ;
         GBPR ("  ->p: %p shallow: %d size: " GBu " arena: %d\n",
-            A->p, A->p_shallow, GB_memsize (A->p_mem), GB_arena (A->p_mem)) ;
+            A->p, A->p_shallow, GB_array_memsize (GB_CSLOT (A, p)), GB_array_arena (GB_CSLOT (A, p))) ;
         GBPR ("  ->i: %p shallow: %d size: " GBu " arena: %d\n",
-            A->i, A->i_shallow, GB_memsize (A->i_mem), GB_arena (A->i_mem)) ;
+            A->i, A->i_shallow, GB_array_memsize (GB_CSLOT (A, i)), GB_array_arena (GB_CSLOT (A, i))) ;
         GBPR ("  ->b: %p shallow: %d size: " GBu " arena: %d\n",
-            A->b, A->b_shallow, GB_memsize (A->b_mem), GB_arena (A->b_mem)) ;
+            A->b, A->b_shallow, GB_array_memsize (GB_CSLOT (A, b)), GB_array_arena (GB_CSLOT (A, b))) ;
         GBPR ("  ->x: %p shallow: %d size: " GBu " arena: %d\n",
-            A->x, A->x_shallow, GB_memsize (A->x_mem), GB_arena (A->x_mem)) ;
+            A->x, A->x_shallow, GB_array_memsize (GB_CSLOT (A, x)), GB_array_arena (GB_CSLOT (A, x))) ;
         GBPR ("  ->Y: %p shallow: %d no_hyper_hash: %d\n",
             (void *) (A->Y), A->Y_shallow, A->no_hyper_hash) ;
     }
@@ -415,13 +415,13 @@ GrB_Info GB_matvec_check    // check a GraphBLAS matrix or vector
     int64_t jsize = A->j_is_32 ? sizeof (uint32_t) : sizeof (uint64_t) ;
     int64_t isize = A->i_is_32 ? sizeof (uint32_t) : sizeof (uint64_t) ;
 
-    if (A->p != NULL && (GB_memsize (A->p_mem) < (A->plen + 1) * psize))
+    if (A->p != NULL && (GB_array_memsize (GB_CSLOT (A, p)) < (A->plen + 1) * psize))
     { 
         GBPR0 ("  A->p is too small!\n") ;
         return (GrB_INVALID_OBJECT) ;
     }
 
-    if (A->h != NULL && (GB_memsize (A->h_mem) < (A->plen) * jsize))
+    if (A->h != NULL && (GB_array_memsize (GB_CSLOT (A, h)) < (A->plen) * jsize))
     { 
         GBPR0 ("  A->h is too small!\n") ;
         return (GrB_INVALID_OBJECT) ;
@@ -444,7 +444,7 @@ GrB_Info GB_matvec_check    // check a GraphBLAS matrix or vector
             GBPR0 ("  ->p [0] = " GBd " invalid\n", p) ;
             return (GrB_INVALID_OBJECT) ;
         }
-        int64_t nzmax = GB_memsize (A->i_mem) / isize ;
+        int64_t nzmax = GB_array_memsize (GB_CSLOT (A, i)) / isize ;
         for (int64_t j = 0 ; j < A->nvec ; j++)
         {
             int64_t p    = GBp (Ap, j,   0) ;
@@ -549,11 +549,11 @@ GrB_Info GB_matvec_check    // check a GraphBLAS matrix or vector
 
     if (A->iso)
     {
-        if (A->x == NULL || GB_memsize (A->x_mem) < A->type->size)
+        if (A->x == NULL || GB_array_memsize (GB_CSLOT (A, x)) < A->type->size)
         { 
             #if GB_DEVELOPER
             GBPR0 ("A->x %p size " GBd " arena %d typesize %d\n", A->x,
-                GB_memsize (A->x_mem), GB_arena (A->x_mem),
+                GB_array_memsize (GB_CSLOT (A, x)), GB_array_arena (GB_CSLOT (A, x)),
                 (int) A->type->size) ;
             #endif
             GBPR0 ("  invalid iso matrix\n") ;

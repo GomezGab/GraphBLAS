@@ -273,6 +273,18 @@ GrB_Info GB_setElement              // set a single entry, C(row,col) = scalar
 
     if (found)
     {
+        // C->x (and C->i or C->b) are modified in place: C must own them
+        int which = GB_OWN_X | (is_zombie ? GB_OWN_I : 0)
+                             | (C_is_bitmap ? GB_OWN_B : 0) ;
+        info = GB_own_matrix (C, which, GB_Context_nthreads_max ( )) ;
+        if (info != GrB_SUCCESS)
+        {
+            return (info) ;
+        }
+    }
+
+    if (found)
+    {
 
         //----------------------------------------------------------------------
         // C (i,j) found

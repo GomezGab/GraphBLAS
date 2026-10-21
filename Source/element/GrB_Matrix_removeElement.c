@@ -193,6 +193,10 @@ GrB_Info GB_Matrix_removeElement
     ASSERT (!GB_JUMBLED (C)) ;
     ASSERT (GB_PENDING_OK (C)) ;
 
+    // C->b (bitmap) or C->i (zombie) is modified in place: C must own it
+    GB_OK (GB_own_matrix (C, GB_IS_BITMAP (C) ? GB_OWN_B : GB_OWN_I,
+        GB_Context_nthreads_max ( ))) ;
+
     // look for index i in vector j
     int64_t i, j, nrows, ncols ;
     if (C->is_csc)

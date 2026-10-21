@@ -30,7 +30,6 @@ GrB_Info GB_convert_full_to_sparse      // convert matrix from full to sparse
     ASSERT (!GB_PENDING (A)) ;
 
     int data_arena = A->data_arena ;
-    uint64_t mem = GB_mem (data_arena, 0) ;
 
     //--------------------------------------------------------------------------
     // allocate A->p and A->i
@@ -45,24 +44,23 @@ GrB_Info GB_convert_full_to_sparse      // convert matrix from full to sparse
     GB_determine_pji_is_32 (&Ap_is_32, &Aj_is_32, &Ai_is_32,
         GxB_AUTO_SPARSITY, anz, avlen, avdim, Werk) ;
 
-    void *Ap = NULL ; uint64_t Ap_mem = mem ;
-    void *Ai = NULL ; uint64_t Ai_mem = mem ;
+    void *Ap = NULL ; uint64_t Ap_mem = 0 ; bool Ap_shallow = false ;
+    void *Ai = NULL ; uint64_t Ai_mem = 0 ; bool Ai_shallow = false ;
 
     size_t psize = (Ap_is_32) ? sizeof (uint32_t) : sizeof (uint64_t) ;
     size_t isize = (Ai_is_32) ? sizeof (uint32_t) : sizeof (uint64_t) ;
 
-    Ap = GB_MALLOC_MEMORY (avdim+1, psize, &Ap_mem) ;
-    Ai = GB_MALLOC_MEMORY (anz, isize, &Ai_mem) ;
+    Ap = GB_array_malloc (GB_VSLOT (Ap), avdim+1, psize, data_arena) ;
+    Ai = GB_array_malloc (GB_VSLOT (Ai), anz, isize, data_arena) ;
     if (Ap == NULL || Ai == NULL)
-    { 
+    {
         // out of memory
-        GB_FREE_MEMORY (&Ap, Ap_mem) ;
-        GB_FREE_MEMORY (&Ai, Ai_mem) ;
+        GB_array_release (GB_VSLOT (Ap)) ;
+        GB_array_release (GB_VSLOT (Ai)) ;
         return (GrB_OUT_OF_MEMORY) ;
     }
 
-    A->p = Ap ; A->p_mem = Ap_mem ;
-    A->i = Ai ; A->i_mem = Ai_mem ;
+    // Ap and Ai are moved into A after they are filled, below
     A->p_is_32 = Ap_is_32 ;
     A->j_is_32 = Aj_is_32 ;
     A->i_is_32 = Ai_is_32 ;
@@ -101,6 +99,13 @@ GrB_Info GB_convert_full_to_sparse      // convert matrix from full to sparse
         // Ai [p] = p % avlen ;
         GB_ISET (Ai, p, p % avlen) ;
     }
+
+    //--------------------------------------------------------------------------
+    // transplant the new A->p and A->i into A
+    //--------------------------------------------------------------------------
+
+    GB_array_move (GB_SLOT (A, p), GB_VSLOT (Ap)) ;
+    GB_array_move (GB_SLOT (A, i), GB_VSLOT (Ai)) ;
 
     //--------------------------------------------------------------------------
     // return result

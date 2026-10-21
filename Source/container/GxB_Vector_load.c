@@ -19,6 +19,15 @@
 
 // V is returned as a non-iso vector of length n, in the full data format.
 
+// Contract relied on by LAGraph and FalkorDB: a load that follows a
+// GxB_Vector_unload of the same vector, or that replaces content the vector
+// owns exclusively, performs no allocation and cannot fail, because the
+// vector keeps the header of the unloaded (or replaced) array as a spare and
+// reuses it (see GB_array_spare_take in memory/GB_array.c).  A readonly load
+// never allocates.  Only a load with GrB_DEFAULT handling into a vector that
+// has neither a spare nor exclusively owned content allocates a header, and
+// only that case can return GrB_OUT_OF_MEMORY; *X then remains the caller's.
+
 // If handling is GxB_IS_READONLY, *X is returned unchanged.  Otherwise, it is
 // returned as NULL to indicate that it has been moved into V.
 
@@ -104,14 +113,28 @@ GrB_Info GxB_Vector_load
     // (hyper_switch, bitmap_switch, [pji]_control, etc) are preserved, except
     // that V->sparsity_control is revised to allow V to become a full vector.
 
+    // Place *X in an array slot: borrowed if readonly, else owned by GraphBLAS
+    // (and added to the global debug memtable).  The header left behind by a
+    // prior GxB_Vector_unload of V, or the header of the content of V that
+    // is about to be discarded, is reused, so that this load cannot fail in
+    // those cases.  Otherwise, if a header cannot be allocated, *X remains the
+    // property of the user application and V is unchanged.
+    GB_array_hdr *spare = GB_array_spare_take (GB_SLOT (V, x)) ;
+    void *Xs = NULL ; uint64_t Xs_mem = 0 ; bool Xs_shallow = false ;
+    bool ok ;
+    GB_array_load (GB_VSLOT (Xs), *X, X_mem, readonly, true, spare, &ok) ;
+    if (!ok)
+    {
+        // out of memory
+        return (GrB_OUT_OF_MEMORY) ;
+    }
     if (!readonly)
-    { 
-        // *X is given to GraphBLAS to be owned by the vector V, so add it to
-        // the global debug memtable.
-        GB_Global_memtable_add (*X, X_mem) ;
+    {
+        // tell the caller that X has been moved into V
+        (*X) = NULL ;
     }
 
-    GB_vector_load (V, X, type, n, X_mem, readonly) ;
+    GB_vector_load (V, GB_VSLOT (Xs), type, n) ;
 
     //--------------------------------------------------------------------------
     // return result

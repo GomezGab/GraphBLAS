@@ -44,7 +44,6 @@ GrB_Info GB_Vector_diag     // extract a diagonal from a matrix, as a vector
 
     int header_arena = GB_arena (V->header_mem) ;
     int data_arena = V->data_arena ;
-    uint64_t mem = GB_mem (data_arena, 0) ;
 
     GrB_Matrix T = NULL ;
 
@@ -147,16 +146,14 @@ GrB_Info GB_Vector_diag     // extract a diagonal from a matrix, as a vector
     if (k >= 0)
     { 
         // transplant T->i into V->i
-        V->i = T->i ;
-        V->i_mem = T->i_mem ;
-        T->i_shallow = true ;
+        GB_array_release (GB_SLOT (V, i)) ;
+        GB_array_move (GB_SLOT (V, i), GB_SLOT (T, i)) ;
     }
     else
-    { 
+    {
         // transplant T->h into V->i
-        V->i = T->h ;
-        V->i_mem = T->h_mem ;
-        T->h_shallow = true ;
+        GB_array_release (GB_SLOT (V, i)) ;
+        GB_array_move (GB_SLOT (V, i), GB_SLOT (T, h)) ;
     }
 
     //--------------------------------------------------------------------------
@@ -168,17 +165,16 @@ GrB_Info GB_Vector_diag     // extract a diagonal from a matrix, as a vector
     if (vcode == acode)
     { 
         // transplant T->x into V->x
-        V->x = T->x ;
-        V->x_mem = T->x_mem ;
-        T->x = NULL ;
+        GB_array_release (GB_SLOT (V, x)) ;
+        GB_array_move (GB_SLOT (V, x), GB_SLOT (T, x)) ;
     }
     else
     {
         // V->x = (vtype) T->x
         // V is sparse so malloc is OK
-        V->x_mem = mem ;
-        V->x = GB_XALLOC_MEMORY (false, V->iso, vnz, vtype->size,
-            &(V->x_mem)) ;
+        GB_array_release (GB_SLOT (V, x)) ;
+        V->x = GB_array_xalloc (GB_SLOT (V, x), false, V->iso, vnz,
+            vtype->size, data_arena) ;
         if (V->x == NULL)
         { 
             // out of memory

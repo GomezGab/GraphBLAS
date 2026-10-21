@@ -108,19 +108,23 @@ GrB_Info GB_convert_sparse_to_hyper // convert from sparse to hypersparse
         // allocate the new A->p and A->h
         //----------------------------------------------------------------------
 
-        GB_Ap_DECLARE (Ap_new, ) ; uint64_t Ap_new_mem = mem ;
-        GB_Ah_DECLARE (Ah_new, ) ; uint64_t Ah_new_mem = mem ;
+        GB_Ap_DECLARE (Ap_new, ) ; uint64_t Ap_new_mem = 0 ;
+        bool Ap_new_shallow = false ;
+        GB_Ah_DECLARE (Ah_new, ) ; uint64_t Ah_new_mem = 0 ;
+        bool Ah_new_shallow = false ;
         int64_t plen_new = (n == 1) ? 1 : nvec_nonempty ;
         size_t psize = A->p_is_32 ? sizeof (uint32_t) : sizeof (uint64_t) ;
         size_t jsize = A->j_is_32 ? sizeof (uint32_t) : sizeof (uint64_t) ;
-        Ap_new = GB_MALLOC_MEMORY (plen_new+1, psize, &Ap_new_mem) ;
-        Ah_new = GB_MALLOC_MEMORY (plen_new  , jsize, &Ah_new_mem) ;
+        Ap_new = GB_array_malloc (GB_VSLOT (Ap_new), plen_new+1, psize,
+            data_arena) ;
+        Ah_new = GB_array_malloc (GB_VSLOT (Ah_new), plen_new  , jsize,
+            data_arena) ;
         if (Ap_new == NULL || Ah_new == NULL)
-        { 
+        {
             // out of memory
             GB_WERK_POP (Count, int64_t) ;
-            GB_FREE_MEMORY (&Ap_new, Ap_new_mem) ;
-            GB_FREE_MEMORY (&Ah_new, Ah_new_mem) ;
+            GB_array_release (GB_VSLOT (Ap_new)) ;
+            GB_array_release (GB_VSLOT (Ah_new)) ;
             return (GrB_OUT_OF_MEMORY) ;
         }
         GB_IPTR (Ap_new, A->p_is_32) ;
@@ -132,10 +136,7 @@ GrB_Info GB_convert_sparse_to_hyper // convert from sparse to hypersparse
 
         A->plen = plen_new ;
         A->nvec = nvec_nonempty ;
-        A->p = Ap_new ; A->p_mem = Ap_new_mem ;
-        A->h = Ah_new ; A->h_mem = Ah_new_mem ;
-        A->p_shallow = false ;
-        A->h_shallow = false ;
+        // Ap_new and Ah_new are moved into A after they are filled, below
 
         //----------------------------------------------------------------------
         // construct the new hyperlist in the new A->p and A->h
@@ -164,6 +165,12 @@ GrB_Info GB_convert_sparse_to_hyper // convert from sparse to hypersparse
 
         // Ap_new [nvec_nonempty] = anz ;
         GB_ISET (Ap_new, nvec_nonempty, anz) ;
+
+        // transplant the new A->p and A->h into the matrix; the old A->p is
+        // still held in Ap_old, Ap_old_mem, and Ap_old_shallow
+        GB_array_clear (GB_SLOT (A, p)) ;
+        GB_array_move (GB_SLOT (A, p), GB_VSLOT (Ap_new)) ;
+        GB_array_move (GB_SLOT (A, h), GB_VSLOT (Ah_new)) ;
         A->magic = GB_MAGIC ;
 
         //----------------------------------------------------------------------
@@ -171,10 +178,7 @@ GrB_Info GB_convert_sparse_to_hyper // convert from sparse to hypersparse
         //----------------------------------------------------------------------
 
         GB_WERK_POP (Count, int64_t) ;
-        if (!Ap_old_shallow)
-        { 
-            GB_FREE_MEMORY (&Ap_old, Ap_old_mem) ;
-        }
+        GB_array_release ((void **) &Ap_old, &Ap_old_mem, &Ap_old_shallow) ;
 
         //----------------------------------------------------------------------
         // A is now hypersparse, but A->Y is not yet constructed

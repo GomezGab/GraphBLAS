@@ -335,6 +335,8 @@ GrB_Info GB_ewise                   // C<M> = accum (C, A+B) or A.*B
 
             // C_replace is ignored
             GBURBLE ("dense C+=A+B ") ;
+            // C is modified in place, so C must own its content
+            GB_OK (GB_own_matrix (C, GB_OWN_ALL, GB_Context_nthreads_max ( ))) ;
             info = GB_ewise_fulla (C, op, A1, B1) ;
             if (info != GrB_NO_VALUE)
             { 
@@ -352,6 +354,8 @@ GrB_Info GB_ewise                   // C<M> = accum (C, A+B) or A.*B
 
             // C_replace is ignored
             GBURBLE ("dense C=A+B ") ;
+            // C may be modified in place, so C must own its content
+            GB_OK (GB_own_matrix (C, GB_OWN_ALL, GB_Context_nthreads_max ( ))) ;
             info = GB_ewise_fulln (C, op, A1, B1) ;
 
             if (info != GrB_NO_VALUE)
@@ -437,27 +441,29 @@ GrB_Info GB_ewise                   // C<M> = accum (C, A+B) or A.*B
                 // A1 is the temporary matrix AT.  AT->h might itself be a
                 // shallow copy of A->h or A->i, from GB_transpose.
                 ASSERT (A1 == AT) ;
-                T->h_shallow = AT->h_shallow ;
-                T->h_mem = AT->h_mem ;
-                AT->h_shallow = true ;
+                // T takes over the ownership status of AT->h (owned or
+                // borrowed); AT keeps a borrowed view that is never freed
+                GB_array_clear (GB_SLOT (T, h)) ;
+                GB_array_move (GB_SLOT (T, h), GB_SLOT (AT, h)) ;
+                GB_array_borrow_from (GB_SLOT (AT, h), GB_CSLOT (T, h)) ;
             }
             else if (B_transpose && T->h == B1->h)
             { 
                 // B1 is the temporary matrix BT.  BT->h might itself be a
                 // shallow copy of B->h or B->i, from GB_transpose.
                 ASSERT (B1 == BT) ;
-                T->h_shallow = BT->h_shallow ;
-                T->h_mem = BT->h_mem ;
-                BT->h_shallow = true ;
+                GB_array_clear (GB_SLOT (T, h)) ;
+                GB_array_move (GB_SLOT (T, h), GB_SLOT (BT, h)) ;
+                GB_array_borrow_from (GB_SLOT (BT, h), GB_CSLOT (T, h)) ;
             }
             else if (M_transpose && T->h == M1->h)
             { 
                 // M1 is the temporary matrix MT.  MT->h might itself be a
                 // shallow copy of M->h or M->i, from GB_transpose.
                 ASSERT (M1 == MT) ;
-                T->h_shallow = MT->h_shallow ;
-                T->h_mem = MT->h_mem ;
-                MT->h_shallow = true ;
+                GB_array_clear (GB_SLOT (T, h)) ;
+                GB_array_move (GB_SLOT (T, h), GB_SLOT (MT, h)) ;
+                GB_array_borrow_from (GB_SLOT (MT, h), GB_CSLOT (T, h)) ;
             }
 
             // T->h may still be shallow, but if so, it is a shallow copy of

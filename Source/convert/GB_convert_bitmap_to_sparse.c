@@ -11,9 +11,9 @@
 
 #define GB_FREE_ALL                     \
 {                                       \
-    GB_FREE_MEMORY (&Cp, Cp_mem) ;      \
-    GB_FREE_MEMORY (&Ci, Ci_mem) ;      \
-    GB_FREE_MEMORY (&Cx, Cx_mem) ;      \
+    GB_array_release (GB_VSLOT (Cp)) ;  \
+    GB_array_release (GB_VSLOT (Ci)) ;  \
+    GB_array_release (GB_VSLOT (Cx)) ;  \
 }
 
 GrB_Info GB_convert_bitmap_to_sparse    // convert matrix from bitmap to sparse
@@ -38,7 +38,6 @@ GrB_Info GB_convert_bitmap_to_sparse    // convert matrix from bitmap to sparse
     ASSERT (!GB_ZOMBIES (A)) ;      // bitmap never has zomies
 
     int data_arena = A->data_arena ;
-    uint64_t mem = GB_mem (data_arena, 0) ;
 
     //--------------------------------------------------------------------------
     // allocate Cp, Ci, and Cx
@@ -50,9 +49,9 @@ GrB_Info GB_convert_bitmap_to_sparse    // convert matrix from bitmap to sparse
     int64_t cnvec_nonempty ;
     const int64_t avdim = A->vdim ;
     const size_t asize = A->type->size ;
-    void *Cp = NULL ; uint64_t Cp_mem = mem ;
-    void *Ci = NULL ; uint64_t Ci_mem = mem ;
-    void *Cx = NULL ; uint64_t Cx_mem = mem ;
+    void *Cp = NULL ; uint64_t Cp_mem = 0 ; bool Cp_shallow = false ;
+    void *Ci = NULL ; uint64_t Ci_mem = 0 ; bool Ci_shallow = false ;
+    void *Cx = NULL ; uint64_t Cx_mem = 0 ; bool Cx_shallow = false ;
 
     bool Cp_is_32, Cj_is_32, Ci_is_32 ;
     GB_determine_pji_is_32 (&Cp_is_32, &Cj_is_32, &Ci_is_32,
@@ -61,8 +60,8 @@ GrB_Info GB_convert_bitmap_to_sparse    // convert matrix from bitmap to sparse
     size_t psize = Cp_is_32 ? sizeof (uint32_t) : sizeof (uint64_t) ;
     size_t isize = Ci_is_32 ? sizeof (uint32_t) : sizeof (uint64_t) ;
 
-    Cp = GB_MALLOC_MEMORY (avdim+1, psize, &Cp_mem) ;
-    Ci = GB_MALLOC_MEMORY (anzmax,  isize, &Ci_mem) ;
+    Cp = GB_array_malloc (GB_VSLOT (Cp), avdim+1, psize, data_arena) ;
+    Ci = GB_array_malloc (GB_VSLOT (Ci), anzmax,  isize, data_arena) ;
     if (Cp == NULL || Ci == NULL)
     { 
         // out of memory
@@ -75,7 +74,7 @@ GrB_Info GB_convert_bitmap_to_sparse    // convert matrix from bitmap to sparse
     { 
         // A is not iso.  Allocate new space for Cx, which is filled by
         // GB_convert_b2s.
-        Cx = GB_MALLOC_MEMORY (anzmax, asize, &Cx_mem) ;
+        Cx = GB_array_malloc (GB_VSLOT (Cx), anzmax, asize, data_arena) ;
         if (Cx == NULL)
         { 
             // out of memory
@@ -97,21 +96,17 @@ GrB_Info GB_convert_bitmap_to_sparse    // convert matrix from bitmap to sparse
     // free prior content of A and transplant the new content
     //--------------------------------------------------------------------------
 
-    bool Cx_shallow = false ;
     if (A_iso)
-    { 
+    {
         // A is iso.  Remove A->x from the matrix so it is not freed by
         // GB_phybix_free; it is transplanted back again just below.
-        Cx = A->x ;
-        Cx_mem = A->x_mem ;
-        Cx_shallow = A->x_shallow ;
-        A->x = NULL ;
+        GB_array_move (GB_VSLOT (Cx), GB_SLOT (A, x)) ;
     }
 
     GB_phybix_free (A) ;        // clears A->nvals
-    A->p = Cp ; A->p_mem = Cp_mem ; A->p_shallow = false ;
-    A->i = Ci ; A->i_mem = Ci_mem ; A->i_shallow = false ;
-    A->x = Cx ; A->x_mem = Cx_mem ; A->x_shallow = Cx_shallow ;
+    GB_array_move (GB_SLOT (A, p), GB_VSLOT (Cp)) ;
+    GB_array_move (GB_SLOT (A, i), GB_VSLOT (Ci)) ;
+    GB_array_move (GB_SLOT (A, x), GB_VSLOT (Cx)) ;
     A->p_is_32 = Cp_is_32 ;
     A->j_is_32 = Cj_is_32 ;
     A->i_is_32 = Ci_is_32 ;

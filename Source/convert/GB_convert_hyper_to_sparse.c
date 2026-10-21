@@ -48,7 +48,6 @@ GrB_Info GB_convert_hyper_to_sparse // convert hypersparse to sparse
     }
 
     int data_arena = A->data_arena ;
-    uint64_t mem = GB_mem (data_arena, 0) ;
 
     //--------------------------------------------------------------------------
     // convert A from hypersparse to sparse
@@ -74,11 +73,16 @@ GrB_Info GB_convert_hyper_to_sparse // convert hypersparse to sparse
         // user as an invalid GrB_Vector.
 
         ASSERT (A->plen == 1) ;
-        ASSERT (GB_memsize (A->p_mem) >= 2 * psize) ;
+        ASSERT (GB_array_memsize (GB_CSLOT (A, p)) >= 2 * psize) ;
         ASSERT (A->nvec == 0 || A->nvec == 1) ;
         if (A->nvec == 0)
-        { 
-            // Ap [0:1] = 0
+        {
+            // Ap [0:1] = 0, written in place: A->p must not be shared
+            GrB_Info info_own = GB_own_matrix (A, GB_OWN_P, 1) ;
+            if (info_own != GrB_SUCCESS)
+            {
+                return (info_own) ;
+            }
             memset (A->p, 0, 2 * psize) ;
             A->nvec = 1 ;
         }
@@ -115,8 +119,9 @@ GrB_Info GB_convert_hyper_to_sparse // convert hypersparse to sparse
         // allocate the new Ap array, of size n+1
         //----------------------------------------------------------------------
 
-        void *Ap_new = NULL ; uint64_t Ap_new_mem = mem ;
-        Ap_new = GB_MALLOC_MEMORY (n+1, psize, &Ap_new_mem) ;
+        void *Ap_new = NULL ; uint64_t Ap_new_mem = 0 ;
+        bool Ap_new_shallow = false ;
+        Ap_new = GB_array_malloc (GB_VSLOT (Ap_new), n+1, psize, data_arena) ;
         if (Ap_new == NULL)
         { 
             // out of memory
@@ -272,7 +277,7 @@ GrB_Info GB_convert_hyper_to_sparse // convert hypersparse to sparse
         GB_phy_free (A) ;
 
         // transplant the new vector pointers; matrix is no longer hypersparse
-        A->p = Ap_new ; A->p_mem = Ap_new_mem ;
+        GB_array_move (GB_SLOT (A, p), GB_VSLOT (Ap_new)) ;
         A->h = NULL ;
         A->nvec = n ;
         GB_nvec_nonempty_set (A, nvec_nonempty) ;

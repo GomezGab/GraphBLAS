@@ -29,7 +29,6 @@ GrB_Info GB_convert_full_to_bitmap      // convert matrix from full to bitmap
     ASSERT (!GB_PENDING (A)) ;
 
     int data_arena = A->data_arena ;
-    uint64_t mem = GB_mem (data_arena, 0) ;
 
     //--------------------------------------------------------------------------
     // allocate A->b
@@ -37,8 +36,7 @@ GrB_Info GB_convert_full_to_bitmap      // convert matrix from full to bitmap
 
     int64_t anz = GB_nnz_full (A) ;
     GB_BURBLE_N (anz, "(full to bitmap) ") ;
-    A->b_mem = mem ;
-    A->b = GB_MALLOC_MEMORY (anz, sizeof (int8_t), &(A->b_mem)) ;
+    A->b = GB_array_malloc (GB_SLOT (A, b), anz, sizeof (int8_t), data_arena) ;
     if (A->b == NULL)
     { 
         // out of memory

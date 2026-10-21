@@ -43,27 +43,27 @@ bool GB_shallow_arenas_ok
 
     if (A->p_shallow && A->p != NULL)
     {
-        if (GB_arena (A->p_mem) != A_data_arena) return (false) ;
+        if (GB_array_arena (GB_CSLOT (A, p)) != A_data_arena) return (false) ;
     }
 
     if (A->h_shallow && A->h != NULL)
     {
-        if (GB_arena (A->h_mem) != A_data_arena) return (false) ;
+        if (GB_array_arena (GB_CSLOT (A, h)) != A_data_arena) return (false) ;
     }
 
     if (A->b_shallow && A->b != NULL)
     {
-        if (GB_arena (A->b_mem) != A_data_arena) return (false) ;
+        if (GB_array_arena (GB_CSLOT (A, b)) != A_data_arena) return (false) ;
     }
 
     if (A->i_shallow && A->i != NULL)
     {
-        if (GB_arena (A->i_mem) != A_data_arena) return (false) ;
+        if (GB_array_arena (GB_CSLOT (A, i)) != A_data_arena) return (false) ;
     }
 
     if (A->x_shallow && A->x != NULL)
     {
-        if (GB_arena (A->x_mem) != A_data_arena) return (false) ;
+        if (GB_array_arena (GB_CSLOT (A, x)) != A_data_arena) return (false) ;
     }
 
     //--------------------------------------------------------------------------

@@ -12,14 +12,13 @@
 void GB_vector_load
 (
     // input/output:
-    GrB_Vector V,           // vector to load from the C array X
-    void **X,               // numerical array to load into V
+    GrB_Vector V,           // vector to load from the array slot X
+    void **X,               // slot to move into V->x (see GB_array.h);
+    uint64_t *X_mem,        // absent on output
+    bool *X_shallow,
     // input:
     GrB_Type type,          // type of X
-    uint64_t n,             // # of entries in X
-    uint64_t X_mem,         // memsize of X in bytes (>= n*(sizeof the type))
-                            // and arena
-    bool readonly           // if true, X is treated as readonly
+    uint64_t n              // # of entries in X
 )
 {
 
@@ -52,14 +51,9 @@ void GB_vector_load
     // load the content into V
     //--------------------------------------------------------------------------
 
-    V->x = (*X) ;
-    V->x_shallow = (V->x == NULL) ? false : readonly ;
-    V->x_mem = X_mem ;      // memsize and data_arena
-    if (!readonly)
-    { 
-        // tell the caller that X has been moved into V
-        (*X) = NULL ;
-    }
+    // move the slot X into V->x; X is absent on output.  A borrowed X
+    // (readonly) remains borrowed in V, and is never freed by V.
+    GB_array_move (GB_SLOT (V, x), X, X_mem, X_shallow) ;
 
     // V is now a valid GrB_Vector of length n, in the full format
     V->magic = GB_MAGIC ;

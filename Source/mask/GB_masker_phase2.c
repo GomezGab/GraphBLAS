@@ -41,6 +41,8 @@
 {                                           \
     GB_FREE_WORKSPACE ;                     \
     GB_phybix_free (R) ;                    \
+    GB_FREE_MEMORY (Rp_handle, Rp_mem) ;    \
+    GB_FREE_MEMORY (Rh_handle, Rh_mem) ;    \
 }
 
 GrB_Info GB_masker_phase2           // phase2 for R = masker (C,M,Z)
@@ -161,8 +163,7 @@ GrB_Info GB_masker_phase2           // phase2 for R = masker (C,M,Z)
     if (info != GrB_SUCCESS)
     { 
         // out of memory; caller must free R_to_M, R_to_C, R_to_Z
-        GB_FREE_MEMORY (Rp_handle, Rp_mem) ;
-        GB_FREE_MEMORY (Rh_handle, Rh_mem) ;
+        GB_FREE_ALL ;
         return (info) ;
     }
 
@@ -175,15 +176,15 @@ GrB_Info GB_masker_phase2           // phase2 for R = masker (C,M,Z)
     { 
 //      R->nvec_nonempty = Rnvec_nonempty ;
         GB_nvec_nonempty_set (R, Rnvec_nonempty) ;
-        R->p = Rp ; R->p_mem = Rp_mem ;
+        GB_OK (GB_array_adopt (GB_SLOT (R, p), Rp, Rp_mem)) ;
         R->nvals = rnz ;
         (*Rp_handle) = NULL ;
     }
 
     // add Rh as the hypersparse list for R, from GB_add_phase0
     if (R_is_hyper)
-    { 
-        R->h = Rh ; R->h_mem = Rh_mem ;
+    {
+        GB_OK (GB_array_adopt (GB_SLOT (R, h), Rh, Rh_mem)) ;
         R->nvec = Rnvec ;
         (*Rh_handle) = NULL ;
     }

@@ -73,7 +73,7 @@ void GB_unop_iso            // Cx [0] = unop (A), binop (s,A) or binop (A,s)
         // Cx [0] depends on the iso value of A
         //----------------------------------------------------------------------
 
-        ASSERT (A->x != NULL && GB_memsize (A->x_mem) >= asize) ;
+        ASSERT (A->x != NULL && GB_array_memsize (GB_CSLOT (A, x)) >= asize) ;
         ASSERT (A->iso) ;
 
         if (C_code_iso == GB_ISO_A)

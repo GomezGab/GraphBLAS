@@ -44,10 +44,12 @@
 }
 
 #undef  GB_FREE_ALL
-#define GB_FREE_ALL                 \
-{                                   \
-    GB_FREE_WORKSPACE ;             \
-    GB_phybix_free (C) ;            \
+#define GB_FREE_ALL                         \
+{                                           \
+    GB_FREE_WORKSPACE ;                     \
+    GB_phybix_free (C) ;                    \
+    GB_FREE_MEMORY (Cp_handle, Cp_mem) ;    \
+    GB_FREE_MEMORY (Ch_handle, Ch_mem) ;    \
 }
 
 GrB_Info GB_add_phase2      // C=A+B, C<M>=A+B, or C<!M>=A+B
@@ -284,8 +286,6 @@ GrB_Info GB_add_phase2      // C=A+B, C<M>=A+B, or C<!M>=A+B
     { 
         // out of memory; caller must free C_to_M, C_to_A, C_to_B
         GB_FREE_ALL ;
-        GB_FREE_MEMORY (Cp_handle, Cp_mem) ;
-        GB_FREE_MEMORY (Ch_handle, Ch_mem) ;
         return (info) ;
     }
 
@@ -293,15 +293,15 @@ GrB_Info GB_add_phase2      // C=A+B, C<M>=A+B, or C<!M>=A+B
     if (C_is_sparse_or_hyper)
     { 
         GB_nvec_nonempty_set (C, Cnvec_nonempty) ;
-        C->p = Cp ; C->p_mem = Cp_mem ;
+        GB_OK (GB_array_adopt (GB_SLOT (C, p), Cp, Cp_mem)) ;
         (*Cp_handle) = NULL ;
         C->nvals = cnz ;
     }
 
     // add Ch as the hypersparse list for C, from GB_add_phase0
     if (C_is_hyper)
-    { 
-        C->h = Ch ; C->h_mem = Ch_mem ;
+    {
+        GB_OK (GB_array_adopt (GB_SLOT (C, h), Ch, Ch_mem)) ;
         C->nvec = Cnvec ;
         (*Ch_handle) = NULL ;
     }

@@ -33,27 +33,25 @@
 void GB_vector_load
 (
     // input/output:
-    GrB_Vector V,           // vector to load from the C array X
-    void **X,               // numerical array to load into V
+    GrB_Vector V,           // vector to load from the array slot X
+    void **X,               // slot to move into V->x (see GB_array.h);
+    uint64_t *X_mem,        // absent on output
+    bool *X_shallow,
     // input:
     GrB_Type type,          // type of X
-    uint64_t n,             // # of entries in X
-    uint64_t X_mem,         // memsize of X in bytes (>= n*(sizeof the type))
-                            // and arena
-    bool readonly           // if true, X is treated as readonly
+    uint64_t n              // # of entries in X
 ) ;
 
 GrB_Info GB_vector_unload
 (
     // input/output:
     GrB_Vector V,           // vector to unload
-    void **X,               // numerical array to unload from V
+    void **X,               // slot to receive V->x (see GB_array.h);
+    uint64_t *X_mem,        // must be absent on input
+    bool *X_shallow,
     // output:
     GrB_Type *type,         // type of X
     uint64_t *n,            // # of entries in X
-    uint64_t *X_mem,        // memsize of X in bytes (>= n*(sizeof the type))
-                            // and arena
-    bool *readonly,         // if true, X is treated as readonly
     GB_Werk Werk
 ) ;
 

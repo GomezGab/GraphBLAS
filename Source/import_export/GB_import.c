@@ -23,6 +23,32 @@
 
 #define GB_FREE_ALL GB_Matrix_free (A) ;
 
+// GB_IMPORT_ARRAY: take ownership of the user array *User for A->c, using a
+// header allocated in advance, so this cannot fail.
+#define GB_IMPORT_ARRAY(c,User,User_memsize)                                \
+{                                                                           \
+    bool ok_import = true ;                                                 \
+    GB_array_load (GB_SLOT (*A, c), (void *) (*(User)),                     \
+        GB_mem (data_arena, User_memsize), false, add_to_memtable,          \
+        spares [nspares_used], &ok_import) ;                                \
+    spares [nspares_used++] = NULL ;                                        \
+    ASSERT (ok_import) ;                                                    \
+    (*(User)) = NULL ;                                                      \
+}
+
+// GB_FREE_SPARES: free the headers allocated in advance but not used
+#define GB_FREE_SPARES                                                      \
+{                                                                           \
+    for (int k = 0 ; k < 5 ; k++)                                           \
+    {                                                                       \
+        if (spares [k] != NULL)                                             \
+        {                                                                   \
+            uint64_t hdr_mem = spares [k]->hdr_mem ;                        \
+            GB_FREE_MEMORY (&(spares [k]), hdr_mem) ;                       \
+        }                                                                   \
+    }                                                                       \
+}
+
 GrB_Info GB_import      // import/pack a matrix in any format
 (
     bool packing,       // pack if true, create and import false
@@ -223,6 +249,27 @@ GrB_Info GB_import      // import/pack a matrix in any format
     // allocate/reuse the header of the matrix
     //--------------------------------------------------------------------------
 
+    //--------------------------------------------------------------------------
+    // allocate the array headers before touching *A or the user arrays
+    //--------------------------------------------------------------------------
+
+    // Each imported array needs a header (see GB_array.h).  Allocating them
+    // here means that from this point on the import cannot fail: on failure
+    // here, *A and all user arrays are unchanged.
+
+    GB_array_hdr *spares [5] = { NULL, NULL, NULL, NULL, NULL } ;
+    int nspares_used = 0 ;
+    for (int k = 0 ; k < 5 ; k++)
+    {
+        spares [k] = GB_array_hdr_new (GB_mem (data_arena, 0)) ;
+        if (spares [k] == NULL)
+        { 
+            // out of memory
+            GB_FREE_SPARES ;
+            return (GrB_OUT_OF_MEMORY) ;
+        }
+    }
+
     if (packing)
     { 
         // clear the content and reuse the header
@@ -238,6 +285,7 @@ GrB_Info GB_import      // import/pack a matrix in any format
     if (info != GrB_SUCCESS)
     { 
         // out of memory
+        GB_FREE_SPARES ;
         return (info) ;
     }
 
@@ -255,14 +303,7 @@ GrB_Info GB_import      // import/pack a matrix in any format
             (*A)->nvec = nvec ;
 
             // import A->h, then fall through to sparse case
-            (*A)->h = (*Ah) ; (*Ah) = NULL ;
-            (*A)->h_mem = GB_mem (data_arena, Ah_memsize) ;
-            if (add_to_memtable)
-            { 
-                // for debugging only
-                GBMDUMP ("import A->h to memtable: %p\n", (*A)->h) ;
-                GB_Global_memtable_add ((*A)->h, (*A)->h_mem) ;
-            }
+            GB_IMPORT_ARRAY (h, Ah, Ah_memsize) ;
             // fall through to the sparse case
 
         case GxB_SPARSE : 
@@ -281,39 +322,18 @@ GrB_Info GB_import      // import/pack a matrix in any format
             else
             { 
                 // import A->p, unless already created for a sparse CSC vector
-                (*A)->p = (*Ap) ; (*Ap) = NULL ;        // OK; 64-bit only
-                (*A)->p_mem = GB_mem (data_arena, Ap_memsize) ;
-                if (add_to_memtable)
-                { 
-                    // for debugging only
-                    GBMDUMP ("import A->p to memtable: %p\n", (*A)->p) ;
-                    GB_Global_memtable_add ((*A)->p, (*A)->p_mem) ;
-                }
+                GB_IMPORT_ARRAY (p, Ap, Ap_memsize) ;   // OK; 64-bit only
             }
 
             // import A->i
-            (*A)->i = (*Ai) ; (*Ai) = NULL ;    // OK; 64-bit only
-            (*A)->i_mem = GB_mem (data_arena, Ai_memsize) ;
-            if (add_to_memtable)
-            { 
-                // for debugging only
-                GBMDUMP ("import A->i to memtable: %p\n", (*A)->i) ;
-                GB_Global_memtable_add ((*A)->i, (*A)->i_mem) ;
-            }
+            GB_IMPORT_ARRAY (i, Ai, Ai_memsize) ;       // OK; 64-bit only
             break ;
 
         case GxB_BITMAP : 
             (*A)->nvals = nvals ;
 
             // import A->b
-            (*A)->b = (*Ab) ; (*Ab) = NULL ;
-            (*A)->b_mem = GB_mem (data_arena, Ab_memsize) ;
-            if (add_to_memtable)
-            { 
-                // for debugging only
-                GBMDUMP ("import A->b to memtable: %p\n", (*A)->b) ;
-                GB_Global_memtable_add ((*A)->b, (*A)->b_mem) ;
-            }
+            GB_IMPORT_ARRAY (b, Ab, Ab_memsize) ;
             break ;
 
         case GxB_FULL : 
@@ -325,15 +345,11 @@ GrB_Info GB_import      // import/pack a matrix in any format
     if (Ax != NULL)
     { 
         // import A->x
-        (*A)->x = (*Ax) ; (*Ax) = NULL ;
-        (*A)->x_mem = GB_mem (data_arena, Ax_memsize) ;
-        if (add_to_memtable)
-        { 
-            // for debugging only
-            GBMDUMP ("import A->x to memtable: %p\n", (*A)->x) ;
-            GB_Global_memtable_add ((*A)->x, (*A)->x_mem) ;
-        }
+        GB_IMPORT_ARRAY (x, Ax, Ax_memsize) ;
     }
+
+    // free the headers that were not needed
+    GB_FREE_SPARES ;
 
     //--------------------------------------------------------------------------
     // fast vs secure import

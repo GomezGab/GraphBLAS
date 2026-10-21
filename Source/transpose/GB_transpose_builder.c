@@ -125,8 +125,8 @@ GrB_Info GB_transpose_builder       // T=A', T=(ctype)A' or T=op(A')
     // if in_place, the prior A->p and A->h can now be freed
     if (in_place)
     { 
-        if (!A->p_shallow) GB_FREE_MEMORY (&A->p, A->p_mem) ;
-        if (!A->h_shallow) GB_FREE_MEMORY (&A->h, A->h_mem) ;
+        GB_array_release (GB_SLOT (A, p)) ;
+        GB_array_release (GB_SLOT (A, h)) ;
     }
 
     GB_void *S_input = NULL ;
@@ -166,9 +166,10 @@ GrB_Info GB_transpose_builder       // T=A', T=(ctype)A' or T=op(A')
     { 
         // A->i is used as workspace for the "column" indices of C.
         // jwork is A->i, and is freed by GB_builder.
-        jwork = A->i ;
-        jwork_mem = A->i_mem ;
-        A->i = NULL ;
+        bool ro ;
+        GB_OK (GB_array_unload (GB_SLOT (A, i), &jwork, &jwork_mem, &ro,
+            GB_Context_nthreads_max ( ), false, NULL)) ;
+        ASSERT (!ro) ;
         ASSERT (in_place) ;
     }
     else

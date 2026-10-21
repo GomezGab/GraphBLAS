@@ -317,21 +317,17 @@ GrB_Info GB_transpose           // C=A', C=(ctype)A' or C=op(A')
         if (T_cheap)
         {
             // no work to do.  Transposing does not change A->b or A->x
-            T->b = A->b ; T->b_mem = A->b_mem ;
-            T->x = A->x ; T->x_mem = A->x_mem ;
             if (in_place)
-            { 
+            {
                 // transplant A->b and A->x into T
-                T->b_shallow = A->b_shallow ;
-                T->x_shallow = A->x_shallow ;
-                A->b = NULL ;
-                A->x = NULL ;
+                GB_array_move (GB_SLOT (T, b), GB_SLOT (A, b)) ;
+                GB_array_move (GB_SLOT (T, x), GB_SLOT (A, x)) ;
             }
             else
-            { 
-                // T is a purely shallow copy of A 
-                T->b_shallow = (A->b != NULL) ;
-                T->x_shallow = true ;
+            {
+                // T is a purely shallow copy of A
+                GB_array_share (GB_SLOT (T, b), GB_CSLOT (A, b)) ;
+                GB_array_share (GB_SLOT (T, x), GB_CSLOT (A, x)) ;
             }
             T->iso = A->iso ;   // OK
         }
@@ -386,16 +382,14 @@ GrB_Info GB_transpose           // C=A', C=(ctype)A' or C=op(A')
 
         // allocate T->p, T->i, and optionally T->x, but not T->h
         int64_t tplen = GB_IMAX (1, anz) ;
-        T->p_mem = mem ;
-        T->i_mem = mem ;
-        T->p = GB_MALLOC_MEMORY (tplen+1, apsize, &(T->p_mem)) ;
-        T->i = GB_MALLOC_MEMORY (anz    , ajsize, &(T->i_mem)) ;
+        T->p = GB_array_malloc (GB_SLOT (T, p), tplen+1, apsize, data_arena) ;
+        T->i = GB_array_malloc (GB_SLOT (T, i), anz    , ajsize, data_arena) ;
         bool allocate_Tx = (op != NULL || C_iso) || (ctype != atype) ;
         if (allocate_Tx)
-        { 
+        {
             // allocate new space for the new typecasted numerical values of T
-            T->x_mem = mem ;
-            T->x = GB_XALLOC_MEMORY (false, C_iso, anz, csize, &(T->x_mem)) ;
+            T->x = GB_array_xalloc (GB_SLOT (T, x), false, C_iso, anz, csize,
+                data_arena) ;
         }
         if (T->p == NULL || T->i == NULL || (allocate_Tx && T->x == NULL))
         { 
@@ -426,17 +420,15 @@ GrB_Info GB_transpose           // C=A', C=(ctype)A' or C=op(A')
         { 
             // no type change; numerical values of T are a shallow copy of A.
             ASSERT (!allocate_Tx) ;
-            T->x = A->x ; T->x_mem = A->x_mem ;
             if (in_place)
             {
                 // transplant A->x as T->x
-                T->x_shallow = A->x_shallow ;
-                A->x = NULL ;
+                GB_array_move (GB_SLOT (T, x), GB_SLOT (A, x)) ;
             }
             else
             {
                 // T->x is a shallow copy of A->x
-                T->x_shallow = true ;
+                GB_array_share (GB_SLOT (T, x), GB_CSLOT (A, x)) ;
             }
         }
 
@@ -444,17 +436,15 @@ GrB_Info GB_transpose           // C=A', C=(ctype)A' or C=op(A')
         // T is a hypersparse 1-by-avlen matrix
 
         // transplant or shallow-copy A->i as the new T->h
-        T->h = A->i ; T->h_mem = A->i_mem ;
         if (in_place)
-        { 
+        {
             // transplant A->i as T->h
-            T->h_shallow = A->i_shallow ;
-            A->i = NULL ;
+            GB_array_move (GB_SLOT (T, h), GB_SLOT (A, i)) ;
         }
         else
-        { 
+        {
             // T->h is a shallow copy of A->i
-            T->h_shallow = true ;
+            GB_array_share (GB_SLOT (T, h), GB_CSLOT (A, i)) ;
         }
 
         // T->p = 0:anz and T->i = zeros (1,anz), newly allocated
@@ -543,20 +533,18 @@ GrB_Info GB_transpose           // C=A', C=(ctype)A' or C=op(A')
         T->iso = C_iso ;    // OK
 
         // allocate new space for the values and pattern
-        T->p_mem = mem ;
-        T->p = GB_CALLOC_MEMORY (2, apsize, &(T->p_mem)) ;
+        T->p = GB_array_calloc (GB_SLOT (T, p), 2, apsize, data_arena) ;
         if (!A_is_hyper)
-        { 
+        {
             // A is sparse, so new space is needed for T->i
-            T->i_mem = mem ;
-            T->i = GB_MALLOC_MEMORY (anz, ajsize, &(T->i_mem)) ;
+            T->i = GB_array_malloc (GB_SLOT (T, i), anz, ajsize, data_arena) ;
         }
         bool allocate_Tx = (op != NULL || C_iso) || (ctype != atype) ;
         if (allocate_Tx)
-        { 
+        {
             // allocate new space for the new typecasted numerical values of T
-            T->x_mem = mem ;
-            T->x = GB_XALLOC_MEMORY (false, C_iso, anz, csize, &(T->x_mem)) ;
+            T->x = GB_array_xalloc (GB_SLOT (T, x), false, C_iso, anz, csize,
+                data_arena) ;
         }
 
         if (T->p == NULL || (T->i == NULL && !A_is_hyper) ||
@@ -589,17 +577,15 @@ GrB_Info GB_transpose           // C=A', C=(ctype)A' or C=op(A')
         { 
             // no type change; numerical values of T are a shallow copy of A.
             ASSERT (!allocate_Tx) ;
-            T->x = A->x ; T->x_mem = A->x_mem ;
             if (in_place)
-            { 
+            {
                 // transplant A->x as T->x
-                T->x_shallow = A->x_shallow ;
-                A->x = NULL ;
+                GB_array_move (GB_SLOT (T, x), GB_SLOT (A, x)) ;
             }
             else
-            { 
+            {
                 // T->x is a shallow copy of A->x
-                T->x_shallow = true ;
+                GB_array_share (GB_SLOT (T, x), GB_CSLOT (A, x)) ;
             }
         }
 
@@ -614,17 +600,15 @@ GrB_Info GB_transpose           // C=A', C=(ctype)A' or C=op(A')
             // each non-empty vector in A becomes an entry in T
             //------------------------------------------------------------------
 
-            T->i = A->h ; T->i_mem = A->h_mem ;
             if (in_place)
-            { 
+            {
                 // transplant A->h as T->i
-                T->i_shallow = A->h_shallow ;
-                A->h = NULL ;
+                GB_array_move (GB_SLOT (T, i), GB_SLOT (A, h)) ;
             }
             else
-            { 
+            {
                 // T->i is a shallow copy of A->h
-                T->i_shallow = true ;
+                GB_array_share (GB_SLOT (T, i), GB_CSLOT (A, h)) ;
             }
 
         }
@@ -916,17 +900,19 @@ GrB_Info GB_transpose           // C=A', C=(ctype)A' or C=op(A')
             // C = op (C), but not in-place since the type of C is changing
             ctype = op->ztype ;
             csize = ctype->size ;
-            uint64_t Cx_mem = mem ;
-            GB_void *Cx_new = NULL ;
+            GB_void *Cx_new = NULL ; uint64_t Cx_new_mem = 0 ;
+            bool Cx_new_shallow = false ;
             if (GB_IS_BITMAP (C))
-            { 
+            {
                 // calloc the space so the new C->x has no uninitialized space
-                Cx_new = GB_CALLOC_MEMORY (anz_held, csize, &Cx_mem) ;
+                Cx_new = GB_array_calloc (GB_VSLOT (Cx_new), anz_held, csize,
+                    data_arena) ;
             }
             else
-            { 
+            {
                 // malloc is fine; all C->x will be written
-                Cx_new = GB_MALLOC_MEMORY (anz_held, csize, &Cx_mem) ;
+                Cx_new = GB_array_malloc (GB_VSLOT (Cx_new), anz_held, csize,
+                    data_arena) ;
             }
             if (Cx_new == NULL)
             { 
@@ -935,12 +921,18 @@ GrB_Info GB_transpose           // C=A', C=(ctype)A' or C=op(A')
                 return (GrB_OUT_OF_MEMORY) ;
             }
             // Cx_new = op (C)
-            GB_OK (GB_apply_op (Cx_new, data_arena, ctype, GB_NON_ISO, op,
-                scalar, false, flipij, C, Werk)) ;
+            info = GB_apply_op (Cx_new, data_arena, ctype, GB_NON_ISO, op,
+                scalar, false, flipij, C, Werk) ;
+            if (info != GrB_SUCCESS)
+            {
+                // out of memory
+                GB_array_release (GB_VSLOT (Cx_new)) ;
+                GB_FREE_ALL ;
+                return (info) ;
+            }
             // transplant Cx_new as C->x and finalize the type of C
-            GB_FREE_MEMORY (&(C->x), C->x_mem) ;
-            C->x = Cx_new ;
-            C->x_mem = Cx_mem ;
+            GB_array_release (GB_SLOT (C, x)) ;
+            GB_array_move (GB_SLOT (C, x), GB_VSLOT (Cx_new)) ;
             C->type = ctype ;
             C->iso = false ;
         }

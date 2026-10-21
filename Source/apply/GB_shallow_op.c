@@ -47,7 +47,6 @@ GrB_Info GB_shallow_op      // create shallow matrix and apply operator
     ASSERT (C != NULL) ;
     int header_arena = GB_arena (C->header_mem) ;
     int data_arena = C->data_arena ;
-    uint64_t mem = GB_mem (data_arena, 0) ;
 
     ASSERT_MATRIX_OK (A, "A for shallow_op", GB0) ;
     ASSERT_OP_OK (op, "unop/binop for shallow_op", GB0) ;
@@ -105,12 +104,9 @@ GrB_Info GB_shallow_op      // create shallow matrix and apply operator
     // make a shallow copy of the vector pointers
     //--------------------------------------------------------------------------
 
-    C->p_shallow = (A->p != NULL) ;     // C->p not freed when freeing C
-    C->h_shallow = (A->h != NULL) ;     // C->h not freed when freeing C
-    C->p = A->p ;                       // C->p is of size A->plen + 1
-    C->h = A->h ;                       // C->h is of size A->plen
-    C->p_mem = A->p_mem ;
-    C->h_mem = A->h_mem ;
+    // C->p and C->h are shared with A (or borrowed, if A borrows them)
+    GB_array_share (GB_SLOT (C, p), GB_CSLOT (A, p)) ;    // size plen+1
+    GB_array_share (GB_SLOT (C, h), GB_CSLOT (A, h)) ;    // size plen
     C->p_is_32 = A->p_is_32 ;
     C->j_is_32 = A->j_is_32 ;
     C->i_is_32 = A->i_is_32 ;
@@ -157,8 +153,8 @@ GrB_Info GB_shallow_op      // create shallow matrix and apply operator
     // make a shallow copy of the pattern
     //--------------------------------------------------------------------------
 
-    C->b = A->b ; C->b_shallow = (A->b != NULL) ; C->b_mem = A->b_mem ;
-    C->i = A->i ; C->i_shallow = (A->i != NULL) ; C->i_mem = A->i_mem ;
+    GB_array_share (GB_SLOT (C, b), GB_CSLOT (A, b)) ;
+    GB_array_share (GB_SLOT (C, i), GB_CSLOT (A, i)) ;
 
     //--------------------------------------------------------------------------
     // make a shallow copy of the values, if possible
@@ -176,9 +172,8 @@ GrB_Info GB_shallow_op      // create shallow matrix and apply operator
     { 
         // no work is done at all.  C is a pure shallow copy
         GBURBLE ("(pure shallow) ") ;
-        C->x = A->x ;
-        C->x_shallow = true ;       // C->x will not be freed when freeing C
-        C->x_mem = A->x_mem ;
+        // C->x is shared with A (or borrowed, if A borrows it)
+        GB_array_share (GB_SLOT (C, x), GB_CSLOT (A, x)) ;
         C->iso = A->iso ;           // C has the same iso property as A
         ASSERT_MATRIX_OK (C, "C = pure shallow (A)", GB0) ;
         return (GrB_SUCCESS) ;
@@ -189,10 +184,8 @@ GrB_Info GB_shallow_op      // create shallow matrix and apply operator
     //--------------------------------------------------------------------------
 
     // allocate new space for the numerical values of C; use calloc if bitmap
-    C->x_mem = mem ;
-    C->x = GB_XALLOC_MEMORY (GB_IS_BITMAP (C), C_iso, anz,
-        C->type->size, &(C->x_mem)) ;
-    C->x_shallow = false ;          // free C->x when freeing C
+    C->x = GB_array_xalloc (GB_SLOT (C, x), GB_IS_BITMAP (C), C_iso, anz,
+        C->type->size, data_arena) ;    // C->x is freed when freeing C
     if (C->x == NULL)
     { 
         // out of memory

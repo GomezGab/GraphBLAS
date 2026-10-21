@@ -58,6 +58,9 @@ GrB_Info GB_bitmap_assign
     GrB_Info info ;
     ASSERT_MATRIX_OK (C, "C for bitmap assign", GB0) ;
 
+    // all methods below modify C in place, so C must own its content
+    GB_OK (GB_own_matrix (C, GB_OWN_ALL, GB_Context_nthreads_max ( ))) ;
+
     //--------------------------------------------------------------------------
     // ensure C is in bitmap form
     //--------------------------------------------------------------------------

@@ -66,16 +66,28 @@ GrB_Info GxB_Vector_unload
     // unload the vector
     //--------------------------------------------------------------------------
 
+    // move V->x into a local slot, then hand the raw array to the user.  The
+    // array is copied first if it is shared with another vector or matrix,
+    // and it is removed from the debug global memtable.
+    void *Xs = NULL ; uint64_t Xs_mem = 0 ; bool Xs_shallow = false ;
+    GB_OK (GB_vector_unload (V, GB_VSLOT (Xs), type, n, Werk)) ;
     bool readonly ;
     uint64_t X_mem ;
-    GB_OK (GB_vector_unload (V, X, type, n, &X_mem, &readonly, Werk)) ;
-    GBMDUMP ("vector_unload, remove X from memtable %p\n", *X) ;
-    if (!readonly)
-    { 
-        // *X is given to the user application, so remove it from the debug
-        // global memtable
-        GB_Global_memtable_remove (*X)  ;
+    GB_array_hdr *spare = NULL ;
+    info = GB_array_unload (GB_VSLOT (Xs), X, &X_mem, &readonly,
+        GB_Context_nthreads_max ( ), true, &spare) ;
+    if (info != GrB_SUCCESS)
+    {
+        // out of memory: put the array back into V, which is then unchanged
+        GB_vector_load (V, GB_VSLOT (Xs), *type, *n) ;
+        return (info) ;
     }
+    // keep the detached header in V as a spare, so that a later
+    // GxB_Vector_load into V needs no allocation
+    ASSERT (V->x == NULL && V->x_mem == 0 && !V->x_shallow) ;
+    V->x_mem = (spare == NULL) ? 0 :
+        (((uint64_t) (uintptr_t) spare) | GB_SPARE_TAG) ;
+    GBMDUMP ("vector_unload, removed X from memtable %p\n", *X) ;
     int data_arena = GB_arena (X_mem) ;
     (*handling) = (readonly ? GxB_IS_READONLY : GrB_DEFAULT) + data_arena ;
     (*X_memsize) = GB_memsize (X_mem) ;

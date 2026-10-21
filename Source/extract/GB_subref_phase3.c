@@ -14,6 +14,14 @@
 #include "sort/GB_sort.h"
 #include "jitifyer/GB_stringify.h"
 
+#undef  GB_FREE_ALL
+#define GB_FREE_ALL                         \
+{                                           \
+    GB_phybix_free (C) ;                    \
+    GB_FREE_MEMORY (Cp_handle, Cp_mem) ;    \
+    GB_FREE_MEMORY (Ch_handle, Ch_mem) ;    \
+}
+
 GrB_Info GB_subref_phase3   // C=A(I,J)
 (
     GrB_Matrix C,               // output matrix, existing header
@@ -134,20 +142,19 @@ GrB_Info GB_subref_phase3   // C=A(I,J)
     if (info != GrB_SUCCESS)
     { 
         // out of memory
-        GB_FREE_MEMORY (Cp_handle, Cp_mem) ;
-        GB_FREE_MEMORY (Ch_handle, Ch_mem) ;
+        GB_FREE_ALL ;
         return (info) ;
     }
 
     // add Cp as the vector pointers for C, from GB_subref_phase2
-    C->p = (*Cp_handle) ; C->p_mem = Cp_mem ;
+    GB_OK (GB_array_adopt (GB_SLOT (C, p), (*Cp_handle), Cp_mem)) ;
     (*Cp_handle) = NULL ;
 
     // add Ch as the hypersparse list for C, from GB_subref_phase0
     if (C_is_hyper)
-    { 
+    {
         // transplant Ch into C
-        C->h = Ch ; C->h_mem = Ch_mem ;
+        GB_OK (GB_array_adopt (GB_SLOT (C, h), Ch, Ch_mem)) ;
         (*Ch_handle) = NULL ;
         C->nvec = Cnvec ;
     }

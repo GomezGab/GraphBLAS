@@ -1060,7 +1060,6 @@ GrB_Info GB_builder                 // build a matrix from tuples
     // allocate T->i
     //--------------------------------------------------------------------------
 
-    T->i_mem = mem ;
     if (ndupl == 0)
     {
 
@@ -1080,14 +1079,25 @@ GrB_Info GB_builder                 // build a matrix from tuples
                     I_work_mem_handle, &ok) ;
                 ASSERT (ok) ;
             }
-            // transplant I_work into T->i
-            T->i = I_work ; T->i_mem = (*I_work_mem_handle) ;
+            // transplant I_work into T->i.  The realloc above may have moved
+            // I_work, so first update the handle in case the transplant fails
+            // and GB_FREE_WORKSPACE must free it.
+            (*I_work_handle) = I_work ;
+            info = GB_array_adopt (GB_SLOT (T, i), I_work,
+                (*I_work_mem_handle)) ;
+            if (info != GrB_SUCCESS)
+            { 
+                // out of memory; I_work is freed by GB_FREE_WORKSPACE
+                GB_phybix_free (T) ;
+                GB_FREE_WORKSPACE ;
+                return (info) ;
+            }
         }
         else
-        { 
+        {
             // T->i and I_work have different sizes, so they must be typecast
-            T->i = GB_MALLOC_MEMORY (tnz,
-                Ti_is_32 ? sizeof (int32_t) : sizeof (int64_t), &(T->i_mem)) ;
+            T->i = GB_array_malloc (GB_SLOT (T, i), tnz,
+                Ti_is_32 ? sizeof (int32_t) : sizeof (int64_t), data_arena) ;
             if (T->i != NULL)
             { 
                 // T->i = cast (I_work), but use uint32/64 for T->i since
@@ -1120,8 +1130,8 @@ GrB_Info GB_builder                 // build a matrix from tuples
         //----------------------------------------------------------------------
 
         // duplicates exist, so allocate a new T->i.  I_work must be freed later
-        T->i = GB_MALLOC_MEMORY (tnz,
-            Ti_is_32 ? sizeof (int32_t) : sizeof (int64_t), &(T->i_mem)) ;
+        T->i = GB_array_malloc (GB_SLOT (T, i), tnz,
+            Ti_is_32 ? sizeof (int32_t) : sizeof (int64_t), data_arena) ;
     }
 
     if (T->i == NULL)
@@ -1245,7 +1255,6 @@ GrB_Info GB_builder                 // build a matrix from tuples
 
     bool copy_S_into_T = (nocasting && known_sorted && ndupl == 0) ;
     info = GrB_NO_VALUE ;
-    T->x_mem = mem ;
 
     if (copy_S_into_T && S_work != NULL)
     { 
@@ -1263,17 +1272,24 @@ GrB_Info GB_builder                 // build a matrix from tuples
         // needed, since S_work is always A->Pending->x.  T and Sx may be iso
         // or non-iso.
 
-        T->x = S_work ; T->x_mem = (*S_work_mem_handle) ;
+        info = GB_array_adopt (GB_SLOT (T, x), S_work, (*S_work_mem_handle)) ;
+        if (info != GrB_SUCCESS)
+        { 
+            // out of memory; S_work is freed by GB_FREE_WORKSPACE
+            GB_phybix_free (T) ;
+            GB_FREE_WORKSPACE ;
+            return (info) ;
+        }
         S_work = NULL ;
         (*S_work_handle) = NULL ;
         (*S_work_mem_handle) = 0 ;
 
         int64_t tx_mem_required = tnz * tsize ;
-        if (2 * tx_mem_required < T->x_mem)
-        { 
+        if (2 * tx_mem_required < GB_array_memsize (GB_CSLOT (T, x)))
+        {
             // shrink the size of T->x
             bool ok = true ;
-            GB_REALLOC_MEMORY (T->x, tnz, tsize, &(T->x_mem), &ok) ;
+            GB_array_realloc (GB_SLOT (T, x), tnz, tsize, data_arena, &ok) ;
         }
         info = GrB_SUCCESS ;
 
@@ -1285,7 +1301,8 @@ GrB_Info GB_builder                 // build a matrix from tuples
         // allocate T->x
         //----------------------------------------------------------------------
 
-        T->x = GB_XALLOC_MEMORY (false, S_iso, tnz, tsize, &(T->x_mem)) ;
+        T->x = GB_array_xalloc (GB_SLOT (T, x), false, S_iso, tnz, tsize,
+            data_arena) ;
         if (T->x == NULL)
         { 
             // out of memory

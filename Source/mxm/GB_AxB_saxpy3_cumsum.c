@@ -22,7 +22,6 @@ GB_CALLBACK_SAXPY3_CUMSUM_PROTO (GB_AxB_saxpy3_cumsum)
     ASSERT (C != NULL) ;
 
     int data_arena = C->data_arena ;
-    uint64_t mem = GB_mem (data_arena, 0) ;
 
     ASSERT (!GB_IS_BITMAP (C)) ;
     ASSERT (!GB_IS_FULL (C)) ;
@@ -180,17 +179,18 @@ GB_CALLBACK_SAXPY3_CUMSUM_PROTO (GB_AxB_saxpy3_cumsum)
         ASSERT (Cp_is_32) ;
         ASSERT (!C->p_shallow) ;
         void *Cp_new = NULL ;
-        uint64_t Cp_new_mem = mem ;
-        Cp_new = GB_MALLOC_MEMORY (cnvec+1, sizeof (uint64_t), &Cp_new_mem) ;
+        uint64_t Cp_new_mem = 0 ;
+        bool Cp_new_shallow = false ;
+        Cp_new = GB_array_malloc (GB_VSLOT (Cp_new), cnvec+1, sizeof (uint64_t),
+            data_arena) ;
         if (Cp_new == NULL)
-        { 
+        {
             return (GrB_OUT_OF_MEMORY) ;
         }
         // Cp_new = (uint64_t) Cp, casting from 32-bit to 64-bit
         GB_cast_int (Cp_new, GB_UINT64_code, Cp, GB_UINT32_code, cnvec+1, nth) ;
-        GB_FREE_MEMORY (&Cp, C->p_mem) ;
-        C->p = Cp_new ;
-        C->p_mem = Cp_new_mem ;
+        GB_array_release (GB_SLOT (C, p)) ;
+        GB_array_move (GB_SLOT (C, p), GB_VSLOT (Cp_new)) ;
         C->p_is_32 = false ;
         // redo the cumsum (this will always succeed)
         GB_cumsum (C->p, false, cnvec, &nvec_nonempty, nth, data_arena, Werk) ;

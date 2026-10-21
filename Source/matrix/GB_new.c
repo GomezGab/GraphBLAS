@@ -83,7 +83,6 @@ GrB_Info GB_new                 // create matrix, except for indices & values
     // allocate the matrix header, if not already allocated on input
     //--------------------------------------------------------------------------
 
-    uint64_t mem = GB_mem (data_arena, 0) ;
     bool allocated_header = false ;
     if ((*Ahandle) == NULL)
     {
@@ -164,12 +163,12 @@ GrB_Info GB_new                 // create matrix, except for indices & values
     }
 
     // no content yet
-    A->p = NULL ; A->p_shallow = false ; A->p_mem = mem ;
-    A->h = NULL ; A->h_shallow = false ; A->h_mem = mem ;
+    A->p = NULL ; A->p_shallow = false ; A->p_mem = 0 ;
+    A->h = NULL ; A->h_shallow = false ; A->h_mem = 0 ;
     A->Y = NULL ; A->Y_shallow = false ; A->no_hyper_hash = false ;
-    A->b = NULL ; A->b_shallow = false ; A->b_mem = mem ;
-    A->i = NULL ; A->i_shallow = false ; A->i_mem = mem ;
-    A->x = NULL ; A->x_shallow = false ; A->x_mem = mem ;
+    A->b = NULL ; A->b_shallow = false ; A->b_mem = 0 ;
+    A->i = NULL ; A->i_shallow = false ; A->i_mem = 0 ;
+    A->x = NULL ; A->x_shallow = false ; A->x_mem = 0 ;
 
     A->nvals = 0 ;
     A->nzombies = 0 ;
@@ -204,12 +203,13 @@ GrB_Info GB_new                 // create matrix, except for indices & values
     {
         // Sets the vector pointers to zero, which defines all vectors as empty
         A->magic = GB_MAGIC ;
-        A->p = GB_CALLOC_MEMORY (A->plen+1, psize, &(A->p_mem)) ;
+        A->p = GB_array_calloc (GB_SLOT (A, p), A->plen+1, psize, data_arena) ;
         ok = (A->p != NULL) ;
         if (A_is_hyper)
-        { 
+        {
             // since nvec is zero, there is never any need to initialize A->h
-            A->h = GB_MALLOC_MEMORY (A->plen, jsize, &(A->h_mem)) ;
+            A->h = GB_array_malloc (GB_SLOT (A, h), A->plen, jsize,
+                data_arena) ;
             ok = ok && (A->h != NULL) ;
         }
     }
@@ -220,11 +220,12 @@ GrB_Info GB_new                 // create matrix, except for indices & values
         // caller must set A->p [0..plen] and then set A->magic to GB_MAGIC,
         // before returning the matrix to the user application.
         A->magic = GB_MAGIC2 ;
-        A->p = GB_MALLOC_MEMORY (A->plen+1, psize, &(A->p_mem)) ;
+        A->p = GB_array_malloc (GB_SLOT (A, p), A->plen+1, psize, data_arena) ;
         ok = (A->p != NULL) ;
         if (A_is_hyper)
-        { 
-            A->h = GB_MALLOC_MEMORY (A->plen, jsize, &(A->h_mem)) ;
+        {
+            A->h = GB_array_malloc (GB_SLOT (A, h), A->plen, jsize,
+                data_arena) ;
             ok = ok && (A->h != NULL) ;
         }
     }

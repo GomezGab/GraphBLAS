@@ -63,8 +63,10 @@ GrB_Info GB_hyper_prune
     GB_Ap_DECLARE (Ap_old, const) ; GB_Ap_PTR (Ap_old, A) ;
     GB_Ah_DECLARE (Ah_old, const) ; GB_Ah_PTR (Ah_old, A) ;
 
-    GB_Ap_DECLARE (Ap_new, ) ; uint64_t Ap_new_mem = mem ;
-    GB_Ah_DECLARE (Ah_new, ) ; uint64_t Ah_new_mem = mem ;
+    GB_Ap_DECLARE (Ap_new, ) ; uint64_t Ap_new_mem = 0 ;
+    bool Ap_new_shallow = false ;
+    GB_Ah_DECLARE (Ah_new, ) ; uint64_t Ah_new_mem = 0 ;
+    bool Ah_new_shallow = false ;
 
     GB_MDECL (W, , u) ; uint64_t W_mem = mem ;
 
@@ -115,14 +117,16 @@ GrB_Info GB_hyper_prune
     //--------------------------------------------------------------------------
 
     int64_t plen_new = GB_IMAX (1, nvec_new) ;
-    Ap_new = GB_MALLOC_MEMORY (plen_new+1, psize, &Ap_new_mem) ;
-    Ah_new = GB_MALLOC_MEMORY (plen_new  , jsize, &Ah_new_mem) ;
+    Ap_new = GB_array_malloc (GB_VSLOT (Ap_new), plen_new+1, psize,
+        data_arena) ;
+    Ah_new = GB_array_malloc (GB_VSLOT (Ah_new), plen_new  , jsize,
+        data_arena) ;
     if (Ap_new == NULL || Ah_new == NULL)
-    { 
+    {
         // out of memory
         GB_FREE_MEMORY (&W, W_mem) ;
-        GB_FREE_MEMORY (&Ap_new, Ap_new_mem) ;
-        GB_FREE_MEMORY (&Ah_new, Ah_new_mem) ;
+        GB_array_release (GB_VSLOT (Ap_new)) ;
+        GB_array_release (GB_VSLOT (Ah_new)) ;
         return (GrB_OUT_OF_MEMORY) ;
     }
     GB_IPTR (Ap_new, A->p_is_32) ;
@@ -163,8 +167,8 @@ GrB_Info GB_hyper_prune
     // transplant the new hyperlist into A
     //--------------------------------------------------------------------------
 
-    A->p = Ap_new ; A->p_mem = Ap_new_mem ;
-    A->h = Ah_new ; A->h_mem = Ah_new_mem ;
+    GB_array_move (GB_SLOT (A, p), GB_VSLOT (Ap_new)) ;
+    GB_array_move (GB_SLOT (A, h), GB_VSLOT (Ah_new)) ;
     A->nvec = nvec_new ;
     A->plen = plen_new ;
     ASSERT (nvec_new == nvec_save) ;

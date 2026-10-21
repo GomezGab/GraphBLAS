@@ -406,6 +406,11 @@ GrB_Info GB_sort
 
     bool A_iso = A->iso ;
     bool sort_in_place = (A == C) ;
+    if (sort_in_place)
+    {
+        // C is sorted in place, so it must own its content
+        GB_OK (GB_own_matrix (C, GB_OWN_ALL, GB_Context_nthreads_max ( ))) ;
+    }
 
     // free any prior content of C and P
     if (A == P)
@@ -746,8 +751,7 @@ GrB_Info GB_sort
     {
         // allocate P->i and use it to construct the new indices
         size_t pisize = P->i_is_32 ? sizeof (uint32_t) : sizeof (uint64_t) ;
-        P->i_mem = mem ;
-        P->i = GB_MALLOC_MEMORY (cnz, pisize, &(P->i_mem)) ;
+        P->i = GB_array_malloc (GB_SLOT (P, i), cnz, pisize, data_arena) ;
         if (P->i == NULL)
         { 
             // out of memory
@@ -820,9 +824,12 @@ GrB_Info GB_sort
             // C is a temporary matrix T, and its contents are not needed.  The
             // indices of C become the values of P, Cp becomes Pp, and Ch (if
             // present) becomes Ph.
-            P->x = C->i ; C->i = NULL ; P->x_mem = C->i_mem ;
-            P->p = C->p ; C->p = NULL ; P->p_mem = C->p_mem ;
-            P->h = C->h ; C->h = NULL ; P->h_mem = C->h_mem ;
+            GB_array_release (GB_SLOT (P, x)) ;
+            GB_array_release (GB_SLOT (P, p)) ;
+            GB_array_release (GB_SLOT (P, h)) ;
+            GB_array_move (GB_SLOT (P, x), GB_SLOT (C, i)) ;
+            GB_array_move (GB_SLOT (P, p), GB_SLOT (C, p)) ;
+            GB_array_move (GB_SLOT (P, h), GB_SLOT (C, h)) ;
             P->plen = C->plen ;
         }
         else
@@ -832,15 +839,16 @@ GrB_Info GB_sort
             // copied to Pp, and Ch (if present) is copied to Ph.
             int64_t pplen = GB_IMAX (1, cnvec) ;
             P->plen = pplen ;
-            P->x_mem = mem ;
-            P->p_mem = mem ;
-            P->h_mem = mem ;
-            P->x = GB_MALLOC_MEMORY (cnz, pxsize, &(P->x_mem)) ;
-            P->p = GB_MALLOC_MEMORY (pplen+1, ppsize, &(P->p_mem)) ;
-            P->h = NULL ;
+            GB_array_release (GB_SLOT (P, x)) ;
+            GB_array_release (GB_SLOT (P, p)) ;
+            GB_array_release (GB_SLOT (P, h)) ;
+            P->x = GB_array_malloc (GB_SLOT (P, x), cnz, pxsize, data_arena) ;
+            P->p = GB_array_malloc (GB_SLOT (P, p), pplen+1, ppsize,
+                data_arena) ;
             if (C_is_hyper)
-            { 
-                P->h = GB_MALLOC_MEMORY (pplen, pjsize, &(P->h_mem)) ;
+            {
+                P->h = GB_array_malloc (GB_SLOT (P, h), pplen, pjsize,
+                    data_arena) ;
             }
             if (P->x == NULL || P->p == NULL || (C_is_hyper && P->h == NULL))
             { 

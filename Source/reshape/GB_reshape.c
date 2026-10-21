@@ -259,13 +259,15 @@ GrB_Info GB_reshape         // reshape a GrB_Matrix into another GrB_Matrix
             { 
                 // remove T->i from T; it becomes I_work and the future C->i.
                 // This can only be done if T->i has the right integer size
-                I_work = T->i ; I_work_mem = T->i_mem ;
-                T->i = NULL   ; T->i_mem = 0 ;
+                bool ro ;
+                GB_OK (GB_array_unload (GB_SLOT (T, i), (void **) &I_work,
+                    &I_work_mem, &ro, GB_Context_nthreads_max ( ), false, NULL)) ;
             }
 
             // remove T->x from T; it becomes S_work, which becomes C->x
-            S_work = T->x ; S_work_mem = T->x_mem ;
-            T->x = NULL   ; T->x_mem = 0 ;
+            bool ro ;
+            GB_OK (GB_array_unload (GB_SLOT (T, x), (void **) &S_work,
+                &S_work_mem, &ro, GB_Context_nthreads_max ( ), false, NULL)) ;
 
             // move T into C
             C = T ;

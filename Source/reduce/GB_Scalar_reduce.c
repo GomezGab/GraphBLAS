@@ -69,6 +69,8 @@ GrB_Info GB_Scalar_reduce
 
     // ignore accum if S has no entry on input
     GrB_BinaryOp accum_op = (nvals == 0) ? NULL : accum ;
+    // S->x is written in place, so S must own it
+    GB_OK (GB_own_matrix ((GrB_Matrix) S, GB_OWN_X, 1)) ;
     GB_OK (GB_reduce_to_scalar (S->x, S->type, accum_op, monoid, A, Werk)) ;
 
     //--------------------------------------------------------------------------

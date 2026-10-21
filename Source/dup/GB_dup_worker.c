@@ -107,11 +107,87 @@ GrB_Info GB_dup_worker      // make an exact copy of a matrix
     // pji integer sizes.  A new header for C is allocated if (*Chandle) is
     // NULL on input, or the existing header is used if (*Chandle) is not NULL
     // on input.
-    GB_OK (GB_new_bix (Chandle, // can be new or existing header
-        numeric ? atype : ctype, A->vlen, A->vdim, GB_ph_malloc, A->is_csc,
-        GB_sparsity (A), false, A->hyper_switch, A->plen, anz, true, C_iso,
+
+    // Each array of A is shared with C, not copied, when it can be: it must
+    // already be in the requested data arena (nothing migrates it afterwards,
+    // and GxB_*_dup_arena may ask for another), A must own it (a readonly
+    // array has no reference count and its owner may free it at any time),
+    // and for A->[phi] its integer size must match the one requested for C.
+    // A->x is shared only if numeric is true.  Each array that cannot be
+    // shared is allocated here and copied (with a typecast if needed) below.
+    // Shared arrays are copied later only if C or A is modified in place.
+
+    bool arena_ok = (data_arena == A->data_arena) && !GB_arenas_will_wait (A) ;
+    bool share_p = arena_ok && (Cp_is_32 == A->p_is_32) && !A->p_shallow ;
+    bool share_h = arena_ok && (Cj_is_32 == A->j_is_32) && !A->h_shallow ;
+    bool share_i = arena_ok && (Ci_is_32 == A->i_is_32) && !A->i_shallow ;
+    bool share_b = arena_ok && !A->b_shallow ;
+    bool share_x = arena_ok && numeric && !A->x_shallow && (A->x != NULL) ;
+
+    GBURBLE ("(dup shares:%s%s%s%s%s) ",
+        (share_p && A->p != NULL) ? " p" : "",
+        (share_h && A->h != NULL) ? " h" : "",
+        (share_b && A->b != NULL) ? " b" : "",
+        (share_i && A->i != NULL) ? " i" : "", share_x ? " x" : "") ;
+
+    GB_OK (GB_new (Chandle, // can be new or existing header
+        numeric ? atype : ctype, A->vlen, A->vdim, GB_ph_null, A->is_csc,
+        GB_sparsity (A), A->hyper_switch, A->plen,
         Cp_is_32, Cj_is_32, Ci_is_32, header_arena, data_arena)) ;
     C = (*Chandle) ;
+    C->iso = C_iso ;
+
+    size_t cpsize = Cp_is_32 ? sizeof (uint32_t) : sizeof (uint64_t) ;
+    size_t cjsize = Cj_is_32 ? sizeof (uint32_t) : sizeof (uint64_t) ;
+    size_t cisize = Ci_is_32 ? sizeof (uint32_t) : sizeof (uint64_t) ;
+    int64_t nzmax = GB_IMAX (anz, 1) ;
+
+    // C->c is shared with A->c, or allocated by the given expression
+    #define GB_DUP_ARRAY(c,share_c,alloc_c)                                 \
+    if (A->c != NULL)                                                       \
+    {                                                                       \
+        if (share_c)                                                        \
+        {                                                                   \
+            GB_array_share (GB_SLOT (C, c), GB_CSLOT (A, c)) ;              \
+        }                                                                   \
+        else                                                                \
+        {                                                                   \
+            C->c = alloc_c ;                                                \
+            if (C->c == NULL)                                               \
+            {                                                               \
+                /* out of memory */                                         \
+                GB_FREE_ALL ;                                               \
+                return (GrB_OUT_OF_MEMORY) ;                                \
+            }                                                               \
+        }                                                                   \
+    }
+
+    GB_DUP_ARRAY (p, share_p,
+        GB_array_malloc (GB_SLOT (C, p), C->plen+1, cpsize, data_arena)) ;
+    GB_DUP_ARRAY (h, share_h,
+        GB_array_malloc (GB_SLOT (C, h), C->plen, cjsize, data_arena)) ;
+    GB_DUP_ARRAY (b, share_b,
+        GB_array_malloc (GB_SLOT (C, b), nzmax, sizeof (int8_t), data_arena)) ;
+    GB_DUP_ARRAY (i, share_i,
+        GB_array_malloc (GB_SLOT (C, i), nzmax, cisize, data_arena)) ;
+
+    if (share_x)
+    { 
+        ASSERT (C_iso == A->iso) ;
+        GB_array_share (GB_SLOT (C, x), GB_CSLOT (A, x)) ;
+    }
+    else
+    {
+        // allocate C->x but do not initialize it (calloc if bitmap)
+        C->x = GB_array_xalloc (GB_SLOT (C, x), GB_IS_BITMAP (A), C_iso,
+            nzmax, C->type->size, data_arena) ;
+        if (C->x == NULL)
+        { 
+            // out of memory
+            GB_FREE_ALL ;
+            return (GrB_OUT_OF_MEMORY) ;
+        }
+    }
 
     //--------------------------------------------------------------------------
     // allocate the pending tuples, if present
@@ -170,23 +246,24 @@ GrB_Info GB_dup_worker      // make an exact copy of a matrix
     GB_Type_code cicode = (C->i_is_32) ? GB_INT32_code  : GB_INT64_code ;
     GB_Type_code aicode = (A->i_is_32) ? GB_INT32_code  : GB_INT64_code ;
 
-    if (A->p != NULL)
+    // copy the arrays that could not be shared (see above)
+    if (A->p != NULL && !share_p)
     { 
         GB_cast_int (C->p, cpcode, A->p, apcode, anvec+1, nthreads_max) ;
     }
-    if (A->h != NULL)
+    if (A->h != NULL && !share_h)
     { 
         GB_cast_int (C->h, cjcode, A->h, ajcode, anvec, nthreads_max) ;
     }
-    if (A->b != NULL)
+    if (A->b != NULL && !share_b)
     { 
         GB_memcpy (C->b, A->b, anz * sizeof (int8_t), nthreads_max) ;
     }
-    if (A->i != NULL)
+    if (A->i != NULL && !share_i)
     { 
         GB_cast_int (C->i, cicode, A->i, aicode, anz, nthreads_max) ;
     }
-    if (numeric)
+    if (numeric && A->x != NULL && !share_x)
     { 
         ASSERT (C_iso == A->iso) ;
         ASSERT (C->type == A->type) ;
