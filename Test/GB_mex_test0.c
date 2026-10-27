@@ -4051,6 +4051,7 @@ void mexFunction
     GB_Global_memtable_remove (v->p) ;
     v->p_mem = GB_mem (0, 3 * sizeof (int64_t)) ;
     v->p = mxMalloc (GB_memsize (v->p_mem)) ;
+    v->p_shallow = true ;       // v->p is now a borrowed array
     memset (v->p, 0, GB_memsize (v->p_mem)) ;
     printf ("test0, add v->p to memtable %d\n", v->p) ;
     GB_Global_memtable_add (v->p, v->p_mem) ;
@@ -4069,6 +4070,7 @@ void mexFunction
     GB_Global_memtable_remove (v->p) ;
     v->p = psave ;
     v->p_mem = p_mem_save ;
+    v->p_shallow = false ;      // v->p is owned again
     printf ("test0, add v->p to memtable %d\n", v->p) ;
     GB_Global_memtable_add (v->p, v->p_mem) ;
     psave = NULL ;
@@ -4716,9 +4718,10 @@ void mexFunction
     OK (GB_convert_hyper_to_sparse (Eleven, true)) ;
     int64_t nothing = 42 ;
     printf ("\nEleven invalid hypersparse:\n") ;
-    GB_free_memory ((void **) &(Eleven->h), Eleven->h_mem) ;
+    GB_array_release (GB_SLOT (Eleven, h)) ;
     Eleven->h = &nothing ;
     Eleven->h_mem = GB_mem (0, sizeof (int64_t)) ;  // h is on the stack
+    Eleven->h_shallow = true ;                      // borrowed, never freed
     printf ("test0, add Eleven->h to memtable %d\n", Eleven->h) ;
     GB_Global_memtable_add (Eleven->h, GB_mem (0, 1 * sizeof (int64_t))) ;
     ERR (GB_Matrix_check (Eleven, "Eleven invalid", G2, NULL)) ;
@@ -4726,7 +4729,7 @@ void mexFunction
     ERR (GxB_Matrix_fprint (Eleven, "Eleven invalid", G2, ff)) ;
     printf ("test0, remove Eleven->h from memtable %d\n", Eleven->h) ;
     GB_Global_memtable_remove (Eleven->h) ;
-    Eleven->h = NULL ;
+    GB_array_clear (GB_SLOT (Eleven, h)) ;
 
     OK (GrB_Matrix_free_(&Eleven)) ;
 

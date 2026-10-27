@@ -29,6 +29,20 @@
 #endif
 #include "../Source/include/GB_dev.h"
 
+// GB_mx_detach: take an array out of a matrix to hand it to MATLAB/Octave.
+// A private copy is made if the array is shared with another matrix, its
+// header is freed, and the block is removed from the debug memtable.  The
+// slot is absent on return and the block belongs to the caller.
+static inline void *GB_mx_detach (void **p, uint64_t *mem, bool *shallow)
+{
+    void *block = NULL ; uint64_t block_mem = 0 ; bool readonly = false ;
+    GrB_Info info = GB_array_unload (p, mem, shallow, &block, &block_mem,
+        &readonly, 1, true, NULL) ;
+    if (info != GrB_SUCCESS) mexErrMsgTxt ("GB_mx_detach: out of memory") ;
+    return (block) ;
+}
+#define GB_MX_DETACH(C,c) GB_mx_detach (GB_SLOT (C, c))
+
 // The MATLAB test code in GraphBLAS/Test test uses mxMalloc/mxFree only, in
 // the arena 1, established after calling GrB_init.
 #define MXARENA 1

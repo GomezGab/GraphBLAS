@@ -446,8 +446,8 @@ GrB_Matrix GB_mx_mxArray_to_Matrix     // returns GraphBLAS version of A
         if (!deep_copy)
         {
             // allocate new space for the GraphBLAS values
-            A->x = (GB_void *) GB_malloc_memory (anz * atype_out->size,
-                sizeof (GB_void), &(A->x_mem)) ;
+            A->x = (GB_void *) GB_array_malloc (GB_SLOT (A, x),
+                anz * atype_out->size, sizeof (GB_void), data_arena) ;
             if (A->x == NULL)
             {
                 FREE_ALL ;
@@ -510,7 +510,7 @@ GrB_Matrix GB_mx_mxArray_to_Matrix     // returns GraphBLAS version of A
         if (!A->x_shallow)
         {
             // convert A to iso, and reduce the size of A->x to a single entry
-            if (GB_memsize (A->x_mem) >= atype_out->size)
+            if (GB_array_memsize (GB_CSLOT (A, x)) >= atype_out->size)
             {
                 // use the first entry of A->x as the iso value of A
                 A->iso = true ;
@@ -527,7 +527,7 @@ GrB_Matrix GB_mx_mxArray_to_Matrix     // returns GraphBLAS version of A
         {
             // just set the iso flag, leave A->x unmodified.  A can be iso
             // only if A->x is large enough to hold at least 1 entry.
-            A->iso = (GB_memsize (A->x_mem) >= atype_out->size) ;
+            A->iso = (GB_array_memsize (GB_CSLOT (A, x)) >= atype_out->size) ;
         }
 
         ASSERT_MATRIX_OK (A, "got iso A from MATLAB", GB0) ;

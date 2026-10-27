@@ -216,12 +216,14 @@ void mexFunction
     OK (GrB_Matrix_new (&C, GrB_FP64, 100, 100)) ;
     OK (GxB_unload_Matrix_into_Container (C, Container, NULL)) ;
 
-    void *x = Container->p->x ;
-    uint64_t x_mem = Container->p->x_mem ;
-    Container->p->x_shallow = true ;
+    // take x out of the container vector, then lend it back as a readonly
+    // (borrowed) array, so that the failing load does not free it
+    void *x = NULL ; uint64_t x_mem = 0 ; bool x_readonly = false ;
+    OK (GB_array_unload (GB_SLOT (Container->p, x), &x, &x_mem, &x_readonly,
+        1, false, NULL)) ;
+    GB_array_borrow (GB_SLOT (Container->p, x), x, x_mem) ;
     Container->jumbled = true ;
     ERR (GxB_load_Matrix_from_Container (C, Container, NULL)) ;
-    Container->p->x_shallow = false ;
     printf ("x is in arena: %d\n", GB_arena (x_mem)) ;
     GB_FREE_MEMORY ((void **) &x, x_mem) ;
     OK (GxB_Container_free (&Container)) ;

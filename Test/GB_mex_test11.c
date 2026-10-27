@@ -621,6 +621,10 @@ if (jit_enabled)
     GB_memoryUsage (&nallocs, &mem_deep, &mem_shallow, A, false) ;
     printf ("nallocs: %ld deep: %lu shallow %lu\n", nallocs,
         mem_deep, mem_shallow) ;
+    // make A->b look borrowed: the slot then holds a plain mem word
+    GB_array_hdr *hb = GB_array_hdr_get (GB_CSLOT (A, b)) ;
+    CHECK (hb != NULL) ;
+    A->b_mem = hb->mem ;
     A->b_shallow = true ;
     OK (GxB_print (A, 3)) ;
     GB_memoryUsage (&nallocs2, &mem_deep2, &mem_shallow2, A, false) ;
@@ -629,6 +633,7 @@ if (jit_enabled)
     CHECK (nallocs == nallocs2 + 1) ;
     CHECK (mem_deep == mem_deep2 + mem_shallow2) ;
     CHECK (mem_shallow2 == 25) ;
+    A->b_mem = (uint64_t) (uintptr_t) hb ;
     A->b_shallow = false ;
     GrB_free (&A) ;
 

@@ -173,8 +173,8 @@ void mexFunction
     OK (GrB_Matrix_wait (A, GrB_MATERIALIZE)) ;
     OK (GxB_Matrix_fprint (A, "valid matrix", GxB_SHORT, NULL)) ;
     // mangle the matrix
-    GB_free_memory (&(A->p), A->p_mem) ;
-    GB_free_memory (&(A->x), A->x_mem) ;  // OK
+    GB_array_release (GB_SLOT (A, p)) ;
+    GB_array_release (GB_SLOT (A, x)) ;   // OK
     expected = GrB_INVALID_OBJECT ;
     ERR (GxB_Matrix_fprint (A, "invalid sparse matrix", GxB_SHORT, NULL)) ;
     GrB_Matrix_free_(&A) ;
@@ -270,19 +270,17 @@ void mexFunction
     OK (GrB_Matrix_wait (A, GrB_MATERIALIZE)) ;
     OK (GrB_Matrix_dup (&C, A)) ;
     CHECK (!GB_any_aliased (A, C)) ;
-    GB_free_memory (&(C->p), C->p_mem) ;
-    C->p = A->p ;
-    C->p_shallow = true ;
+    // C->p is shared with A->p after the dup (not an alias); replace it
+    // with a shallow (borrowed) view of A->p, which is an alias
+    GB_array_release (GB_SLOT (C, p)) ;
+    GB_array_borrow_from (GB_SLOT (C, p), GB_CSLOT (A, p)) ;
     CHECK (GB_any_aliased (A, C)) ;
-    C->p = NULL ;
-    C->p_shallow = false ;
+    GB_array_clear (GB_SLOT (C, p)) ;
     CHECK (!GB_any_aliased (A, C)) ;
-    GB_free_memory (&(C->i), C->i_mem) ;
-    C->i = A->i ;
-    C->i_shallow = true ;
+    GB_array_release (GB_SLOT (C, i)) ;
+    GB_array_borrow_from (GB_SLOT (C, i), GB_CSLOT (A, i)) ;
     CHECK (GB_any_aliased (A, C)) ;
-    C->i = NULL ;
-    C->i_shallow = false ;
+    GB_array_clear (GB_SLOT (C, i)) ;
     GrB_Matrix_free_(&A) ;
     GrB_Matrix_free_(&C) ;
 

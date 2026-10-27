@@ -62,17 +62,22 @@ void mexFunction
     CHECK (!will_wait) ;
 
     printf ("\ninvalid A->p:\n") ;
-    uint64_t save = A->p_mem ;
-    A->p_mem = GB_mem (0, 3) ;
+    // the memsize of an owned array lives in its header
+    GB_array_hdr *hp = GB_array_hdr_get (GB_CSLOT (A, p)) ;
+    CHECK (hp != NULL) ;
+    uint64_t save = hp->mem ;
+    hp->mem = GB_mem (0, 3) ;
     expected = GrB_INVALID_OBJECT ;
     ERR (GxB_Matrix_fprint (A, "A with invalid A->p", 3, NULL)) ;
-    A->p_mem = save ;
+    hp->mem = save ;
 
     printf ("\ninvalid A->h:\n") ;
-    save = A->h_mem ;
-    A->h_mem = GB_mem (0, 3) ;
+    GB_array_hdr *hh = GB_array_hdr_get (GB_CSLOT (A, h)) ;
+    CHECK (hh != NULL) ;
+    save = hh->mem ;
+    hh->mem = GB_mem (0, 3) ;
     ERR (GxB_Matrix_fprint (A, "A with invalid A->h", 3, NULL)) ;
-    A->h_mem = save ;
+    hh->mem = save ;
 
     printf ("\ninvalid A->Y:\n") ;
     CHECK (A->Y != NULL) ;

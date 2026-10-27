@@ -163,11 +163,9 @@ mxArray *GB_mx_object_to_mxArray    // returns the MATLAB mxArray
     if (C->x == NULL)
     {
         ASSERT (cnz == 0) ;
-        C->x_mem = mem ;
-        C->x = (GB_void *) GB_malloc_memory (2 * sizeof (double),
-            sizeof (GB_void), &(C->x_mem)) ;
+        C->x = (GB_void *) GB_array_malloc (GB_SLOT (C, x), 2,
+            sizeof (double), GB_ARENA_TEST) ;
         memset (C->x, 0, 2 * sizeof (double)) ;
-        C->x_shallow = false ;
     }
 
     bool C_is_full = (sparsity == GxB_FULL) ;
@@ -177,21 +175,17 @@ mxArray *GB_mx_object_to_mxArray    // returns the MATLAB mxArray
         if (C->i == NULL)
         {
             ASSERT (cnz == 0) ;
-            C->i_mem = mem ;
-            C->i = (int64_t *) GB_malloc_memory (1, sizeof (uint64_t),
-                &(C->i_mem)) ;
+            C->i = (int64_t *) GB_array_malloc (GB_SLOT (C, i), 1,
+                sizeof (uint64_t), GB_ARENA_TEST) ;
             uint64_t *Ci = C->i ;
             Ci [0] = 0 ;
-            C->i_shallow = false ;
         }
         if (C->p == NULL)
         {
             ASSERT (cnz == 0) ;
-            C->p_mem = mem ;
-            C->p = (int64_t *) GB_malloc_memory (C->vdim + 1, sizeof (uint64_t),
-                &(C->p_mem)) ;
+            C->p = (int64_t *) GB_array_malloc (GB_SLOT (C, p), C->vdim + 1,
+                sizeof (uint64_t), GB_ARENA_TEST) ;
             memset (C->p, 0, (C->vdim + 1) * sizeof (int64_t)) ;
-            C->p_shallow = false ;
         }
     }
 
@@ -204,7 +198,9 @@ mxArray *GB_mx_object_to_mxArray    // returns the MATLAB mxArray
         // C is full.
         // allocate an empty dense matrix of the right type, then set content
 
-        void *Cx = (void *) C->x ;
+        // C->x is detached from C (copied first if shared) and now belongs
+        // to the MATLAB/Octave matrix
+        void *Cx = GB_MX_DETACH (C, x) ;
 
         if (ctype == GrB_BOOL)
         { 
@@ -276,33 +272,24 @@ mxArray *GB_mx_object_to_mxArray    // returns the MATLAB mxArray
             mexErrMsgTxt ("... unsupported type") ;
         }
 
-        mexMakeMemoryPersistent (C->x) ;
-        C->x_shallow = false ;
-        GB_AS_IF_FREE (C->x) ;   // unlink C->x from C; now in MATLAB C
-
+        mexMakeMemoryPersistent (Cx) ;
     }
     else if (C->type == GrB_BOOL)
     {
         // C is boolean, which is the same as a MATLAB logical sparse matrix
         A = mxCreateSparseLogicalMatrix (0, 0, 0) ;
-        mexMakeMemoryPersistent (C->x) ;
-        mxSetData (A, (bool *) C->x) ;
-        C->x_shallow = false ;
-
-        // C->x is treated as if it was freed
-        GB_AS_IF_FREE (C->x) ;   // unlink C->x from C; now in MATLAB C
+        void *Cx = GB_MX_DETACH (C, x) ;    // now in MATLAB C
+        mexMakeMemoryPersistent (Cx) ;
+        mxSetData (A, (bool *) Cx) ;
 
     }
     else if (C->type == GrB_FP64)
     {
         // C is double, which is the same as a MATLAB double sparse matrix
         A = mxCreateSparse (0, 0, 0, mxREAL) ;
-        mexMakeMemoryPersistent (C->x) ;
-        mxSetData (A, C->x) ;
-        C->x_shallow = false ;
-
-        // C->x is treated as if it was freed
-        GB_AS_IF_FREE (C->x) ;   // unlink C->x from C; in MATLAB C
+        void *Cx = GB_MX_DETACH (C, x) ;    // now in MATLAB C
+        mexMakeMemoryPersistent (Cx) ;
+        mxSetData (A, Cx) ;
 
     }
     else if (C->type == Complex || C->type == GxB_FC64)
@@ -346,18 +333,20 @@ mxArray *GB_mx_object_to_mxArray    // returns the MATLAB mxArray
             X = GB_mx_create_full (0, 0, C->type) ;
             mxSetM (X, cnz) ;
             mxSetN (X, 1) ;
-            mxSetData (X, C->x) ;
-            mexMakeMemoryPersistent (C->x) ;
-            C->x_shallow = false ;
-            // treat C->x as if it were freed
-            GB_AS_IF_FREE (C->x) ;
+            void *Cx = GB_MX_DETACH (C, x) ;    // now in MATLAB X
+            mxSetData (X, Cx) ;
+            mexMakeMemoryPersistent (Cx) ;
         }
     }
 
     // set nrows, ncols, nzmax, and the pattern of A
     mxSetM (A, C->vlen) ;
     mxSetN (A, C->vdim) ;
-    mxSetNzmax (A, cnz) ;
+    if (!C_is_full)
+    {
+        // Octave rejects mxSetNzmax on a full (non-sparse) mxArray
+        mxSetNzmax (A, cnz) ;
+    }
 
     if (!C_is_full)
     {
@@ -366,17 +355,14 @@ mxArray *GB_mx_object_to_mxArray    // returns the MATLAB mxArray
         ASSERT (!C->i_is_32) ;
         mxFree (mxGetJc (A)) ;
         mxFree (mxGetIr (A)) ;
-        mexMakeMemoryPersistent (C->p) ;
-        mexMakeMemoryPersistent (C->i) ;
-        mxSetJc (A, (size_t *) C->p) ;
-        mxSetIr (A, (size_t *) C->i) ;
-
-        // treat C->p as if freed
-        GB_AS_IF_FREE (C->p) ;
-
-        // treat C->i as if freed
-        C->i_shallow = false ;
-        GB_AS_IF_FREE (C->i) ;
+        // C->p and C->i are detached from C (copied first if shared) and
+        // now belong to the MATLAB/Octave matrix
+        void *Cp = GB_MX_DETACH (C, p) ;
+        void *Ci = GB_MX_DETACH (C, i) ;
+        mexMakeMemoryPersistent (Cp) ;
+        mexMakeMemoryPersistent (Ci) ;
+        mxSetJc (A, (size_t *) Cp) ;
+        mxSetIr (A, (size_t *) Ci) ;
     }
 
     //--------------------------------------------------------------------------
