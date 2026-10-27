@@ -15,7 +15,9 @@
 // at all.
 
 #include "mex.h"
+#ifndef HAVE_OCTAVE
 #include "matrix.h"
+#endif
 #include <stdlib.h>
 #include <string.h>
 #include <stdint.h>

@@ -21,7 +21,12 @@
 #undef OK
 #include "GB_mx_usercomplex.h"
 #include "mex.h"
+#ifndef HAVE_OCTAVE
+// MATLAB's matrix.h; Octave's mex.h already declares the mxArray API, and on
+// a case-insensitive file system "matrix.h" would resolve to Octave's C++
+// Matrix.h instead.
 #include "matrix.h"
+#endif
 #include "../Source/include/GB_dev.h"
 
 // The MATLAB test code in GraphBLAS/Test test uses mxMalloc/mxFree only, in

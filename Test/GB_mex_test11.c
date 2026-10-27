@@ -535,6 +535,10 @@ if (jit_enabled)
     GrB_IndexUnaryOp MyIdxOp = NULL ;
     #undef GrB_IndexUnaryOp_new
     #undef GrM_IndexUnaryOp_new
+    #ifndef GBMATLAB
+    // without the renamed library, the raw function is GrB_IndexUnaryOp_new
+    #define GrM_IndexUnaryOp_new GrB_IndexUnaryOp_new
+    #endif
     OK (GrM_IndexUnaryOp_new (&MyIdxOp, (GxB_index_unary_function) gb_myidx_11,
         GrB_INT64, GrB_INT64, GrB_INT64)) ;
     OK (GxB_print (MyIdxOp, 3)) ;

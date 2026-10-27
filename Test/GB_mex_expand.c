@@ -8,7 +8,9 @@
 //------------------------------------------------------------------------------
 
 #include "GB_mex.h"
+#ifndef HAVE_OCTAVE
 #include "matrix.h"
+#endif
 
 #define USAGE "C = GB_mex_expand (M, scalar)"
 

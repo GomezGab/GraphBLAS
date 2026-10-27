@@ -1,3 +1,4 @@
+#include <stdio.h>
 #include "spok.h"
 #include "mex.h"
 

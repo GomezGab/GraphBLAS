@@ -111,7 +111,19 @@ elseif (isunix)
     ldflags = '-fopenmp -fPIC' ;
     rpath = '-rpath=' ;
 end
-if (ismac || isunix)
+if (have_octave && (ismac || isunix))
+    % Octave's mex (mkoctfile) does not accept the CFLAGS=... overrides below;
+    % it passes -W... to the compiler and -Wl,... to the linker as they are.
+    % (the mex command is evaluated in command syntax: the whole linker
+    % token is quoted, since an unquoted comma would end the argument)
+    % Octave's mex also does not define MATLAB_MEX_FILE, which the test
+    % sources use to select the mexFunction interface.
+    % Recent clang rejects the typed function pointers some tests pass to
+    % GrB_*Op_new; keep that a warning, as older compilers did.
+    flags = [ flags ' -DMATLAB_MEX_FILE -Wno-pragmas' ...
+        ' -Wno-incompatible-function-pointer-types' ...
+        ' ''-Wl,-rpath,' library_path ''' ' ] ;
+elseif (ismac || isunix)
     rpath = sprintf (' -Wl,%s''''%s'''' ', rpath, library_path) ;
     flags = [ flags ' CFLAGS=''$CFLAGS ' cflags ' -Wno-pragmas'' '] ;
     flags = [ flags ' CXXFLAGS=''$CXXFLAGS ' cflags ' -Wno-pragmas'' '] ;
