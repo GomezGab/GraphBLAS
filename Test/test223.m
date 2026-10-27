@@ -44,7 +44,10 @@ C1 = GB_mex_mxm (Cin, M, [ ], semiring, Ain, Bin, desc) ;
 C1.matrix (1,1) = 0 ;
 C2 = A*B ;
 C2 (1,1) = 0 ;
-assert (isequal (C1.matrix, C2)) ;
+% Octave's sparse A*B sums in a different order than MATLAB's, so compare
+% with a tolerance; the patterns must still be identical
+assert (isequal (spones (C1.matrix), spones (C2))) ;
+assert (norm (C1.matrix - C2, 1) <= 1e-12 * norm (C2, 1)) ;
 
 GB_mex_burble (0) ;
 nthreads_set (save1, save2) ;

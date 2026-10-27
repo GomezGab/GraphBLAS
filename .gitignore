@@ -72,3 +72,5 @@ cmake-build-debug/
 !.gitignore
 
 build_debug/
+build_asan/
+build_memdump/

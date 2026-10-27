@@ -23,6 +23,11 @@ void mexFunction
     const mxArray *pargin [ ]
 )
 {
+    // Octave allocates only max (nargout, 1) output slots, so the outputs are
+    // built in a local array and only the requested ones are returned
+    mxArray *out [16] ;
+    memset (out, 0, sizeof (out)) ;
+
 //  mexPrintf ("usage:\n%s\n", USAGE) ;
 
     // finalize GraphBLAS but tell it that it can be called again
@@ -43,68 +48,68 @@ void mexFunction
 
     int nthreads ;
     GxB_Global_Option_get_(GxB_NTHREADS, &nthreads) ;
-    pargout [0] = mxCreateDoubleScalar (nthreads) ;
+    out [0] = mxCreateDoubleScalar (nthreads) ;
 
     int format ;
     GxB_Global_Option_get_(GxB_FORMAT, &format) ;
-    pargout [1] = mxCreateDoubleScalar (format) ;
+    out [1] = mxCreateDoubleScalar (format) ;
 
     double hyper_switch ;
     GxB_Global_Option_get_(GxB_HYPER_SWITCH, &hyper_switch) ;
-    pargout [2] = mxCreateDoubleScalar (hyper_switch) ;
+    out [2] = mxCreateDoubleScalar (hyper_switch) ;
 
     char *name ;
     GxB_Global_Option_get_(GxB_LIBRARY_NAME, &name) ;
-    pargout [3] = mxCreateString (name) ;
+    out [3] = mxCreateString (name) ;
 
     int version [3] ;
     GxB_Global_Option_get_(GxB_LIBRARY_VERSION, version) ;
-    pargout [4] = mxCreateDoubleMatrix (1, 3, mxREAL) ;
-    double *p = mxGetPr (pargout [4]) ;
+    out [4] = mxCreateDoubleMatrix (1, 3, mxREAL) ;
+    double *p = mxGetPr (out [4]) ;
     p [0] = version [0] ;
     p [1] = version [1] ;
     p [2] = version [2] ;
 
     char *date ;
     GxB_Global_Option_get_(GxB_LIBRARY_DATE, &date) ;
-    pargout [5] = mxCreateString (date) ;
+    out [5] = mxCreateString (date) ;
 
     char *about ;
     GxB_Global_Option_get_(GxB_LIBRARY_ABOUT, &about) ;
-    pargout [6] = mxCreateString (about) ;
+    out [6] = mxCreateString (about) ;
 
     char *license ;
     GxB_Global_Option_get_(GxB_LIBRARY_LICENSE, &license) ;
-    pargout [7] = mxCreateString (license) ;
+    out [7] = mxCreateString (license) ;
 
     char *compile_date ;
     GxB_Global_Option_get_(GxB_LIBRARY_COMPILE_DATE, &compile_date) ;
-    pargout [8] = mxCreateString (compile_date) ;
+    out [8] = mxCreateString (compile_date) ;
 
     char *compile_time ;
     GxB_Global_Option_get_(GxB_LIBRARY_COMPILE_TIME, &compile_time) ;
-    pargout [9] = mxCreateString (compile_time) ;
+    out [9] = mxCreateString (compile_time) ;
 
     int api [3] ;
     GxB_Global_Option_get_(GxB_API_VERSION, api) ;
-    pargout [10] = mxCreateDoubleMatrix (1, 3, mxREAL) ;
-    double *a = mxGetPr (pargout [10]) ;
+    out [10] = mxCreateDoubleMatrix (1, 3, mxREAL) ;
+    double *a = mxGetPr (out [10]) ;
     a [0] = api [0] ;
     a [1] = api [1] ;
     a [2] = api [2] ;
 
     char *api_about ;
     GxB_Global_Option_get_(GxB_API_ABOUT, &api_about) ;
-    pargout [11] = mxCreateString (api_about) ;
+    out [11] = mxCreateString (api_about) ;
 
     double chunk ;
     GxB_Global_Option_get_(GxB_CHUNK, &chunk) ;
-    pargout [12] = mxCreateDoubleScalar (chunk) ;
+    out [12] = mxCreateDoubleScalar (chunk) ;
 
     double bitmap_switch [GxB_NBITMAP_SWITCH] ;
     GxB_Global_Option_get_(GxB_BITMAP_SWITCH, bitmap_switch) ;
-    pargout [13] = mxCreateDoubleMatrix (1, GxB_NBITMAP_SWITCH, mxREAL) ;
-    double *bswitch = mxGetPr (pargout [13]) ;
+    out [13] = mxCreateDoubleMatrix (1, GxB_NBITMAP_SWITCH, mxREAL) ;
+    double *bswitch = mxGetPr (out [13]) ;
     for (int k = 0 ; k < GxB_NBITMAP_SWITCH ; k++)
     {
         bswitch [k] = bitmap_switch [k] ;
@@ -112,5 +117,9 @@ void mexFunction
 
     // finalize GraphBLAS but tell it that it can be called again
     GB_mx_at_exit ( ) ;
-}
 
+    for (int k = 0 ; k < nargout && k < 16 ; k++)
+    {
+        pargout [k] = out [k] ;
+    }
+}
