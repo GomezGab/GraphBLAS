@@ -96,6 +96,7 @@ GrB_Info GB_emult           // C=A.*B, C<M>=A.*B, or C<!M>=A.*B
     int64_t Cnvec, Cnvec_nonempty ;
     void *Cp = NULL ; uint64_t Cp_mem = mem ;
     const void *Ch = NULL ; uint64_t Ch_mem = mem ;
+    GrB_Matrix Ch_source = NULL ;
     int C_ntasks = 0, C_nthreads ;
     bool Cp_is_32, Cj_is_32, Ci_is_32 ;
 
@@ -443,7 +444,7 @@ GrB_Info GB_emult           // C=A.*B, C<M>=A.*B, or C<!M>=A.*B
 
     GB_OK (GB_emult_08_phase0 (
         // computed by phase0:
-        &Cnvec, &Ch, &Ch_mem,
+        &Cnvec, &Ch, &Ch_mem, &Ch_source,
         &C_to_M, &C_to_M_mem,
         &C_to_A, &C_to_A_mem,
         &C_to_B, &C_to_B_mem,
@@ -496,7 +497,7 @@ GrB_Info GB_emult           // C=A.*B, C<M>=A.*B, or C<!M>=A.*B
         // from phase1a:
         TaskList, C_ntasks, C_nthreads,
         // from phase0:
-        Cnvec, Ch, Ch_mem, C_to_M, C_to_A, C_to_B,
+        Cnvec, Ch, Ch_mem, Ch_source, C_to_M, C_to_A, C_to_B,
         Cp_is_32, Cj_is_32, Ci_is_32, C_sparsity,
         // from GB_emult_sparsity:
         ewise_method,

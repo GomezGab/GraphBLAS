@@ -259,11 +259,15 @@ GrB_Info GB_accum_mask          // C<M> = accum (C,T)
     // GB_transplant for Z=T and GB_transplant_conform in GB_mask for C=Z).
     // So in this case, GB_subassign takes more work.
 
-    // C may share arrays with M or T without being aliased with them (after a
-    // GrB_dup, or when T is a shallow copy of C as in C<M>=C).  GB_subassign
-    // would be correct in that case (it takes private copies of C's arrays
-    // before writing), but it would then insert all of T as pending tuples
-    // into C, so treat shared arrays like aliases when choosing the method.
+    // The alias test here is a proxy for "T is a copy of C" (C<M>=C, where T
+    // is a shallow copy of C; or T derived from a dup of C).  In that case
+    // tnz == cnz, so the subassign heuristic above would pass, and
+    // GB_subassign would clear C (C_replace) and re-insert every entry of T
+    // as a pending tuple: O(nnz(C)) tuple assembly instead of the masker's
+    // single pass.  Neither kernel needs a distinction for shared arrays
+    // (GB_subassign takes private copies before writing); only the method
+    // choice does, so GB_any_shared (same content, any ownership) is used
+    // here, not GB_any_aliased (would an in-place write corrupt the other).
     if (GB_any_shared (C, M)) GBURBLE ("(C aliased with M) ") ;
     if (GB_any_shared (C, T)) GBURBLE ("(C aliased with T) ") ;
 

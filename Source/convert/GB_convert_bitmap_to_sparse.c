@@ -49,9 +49,9 @@ GrB_Info GB_convert_bitmap_to_sparse    // convert matrix from bitmap to sparse
     int64_t cnvec_nonempty ;
     const int64_t avdim = A->vdim ;
     const size_t asize = A->type->size ;
-    void *Cp = NULL ; uint64_t Cp_mem = 0 ; bool Cp_shallow = false ;
-    void *Ci = NULL ; uint64_t Ci_mem = 0 ; bool Ci_shallow = false ;
-    void *Cx = NULL ; uint64_t Cx_mem = 0 ; bool Cx_shallow = false ;
+    GB_VSLOT_DECLARE (void *, Cp) ;
+    GB_VSLOT_DECLARE (void *, Ci) ;
+    GB_VSLOT_DECLARE (void *, Cx) ;
 
     bool Cp_is_32, Cj_is_32, Ci_is_32 ;
     GB_determine_pji_is_32 (&Cp_is_32, &Cj_is_32, &Ci_is_32,

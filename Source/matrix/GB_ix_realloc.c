@@ -80,6 +80,11 @@ GrB_Info GB_ix_realloc      // reallocate space in a matrix
     bool ok1 = true, ok2 = true ;
     size_t isize = A->i_is_32 ? sizeof (int32_t) : sizeof (int64_t) ;
     int data_arena = A->data_arena ;
+    // GB_array_realloc: if A->i is shared, a new block of the new size is
+    // allocated (with a new header), the old content copied into it, and the
+    // old reference dropped; if A->i is exclusively owned, the block itself is
+    // reallocated and its header updated in place.  Either way A->i ends up
+    // exclusively owned.
     GB_array_realloc (GB_SLOT (A, i), nzmax_new1, isize, data_arena, &ok1) ;
 
     //--------------------------------------------------------------------------

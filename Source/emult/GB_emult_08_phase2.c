@@ -58,6 +58,7 @@ GrB_Info GB_emult_08_phase2             // C=A.*B or C<M>=A.*B
     const int64_t Cnvec,
     const void *Ch,
     uint64_t Ch_mem,
+    const GrB_Matrix Ch_source, // matrix whose h is Ch (M, A, or B), or NULL
     const int64_t *restrict C_to_M,
     const int64_t *restrict C_to_A,
     const int64_t *restrict C_to_B,
@@ -176,8 +177,20 @@ GrB_Info GB_emult_08_phase2             // C=A.*B or C<M>=A.*B
     // add Ch as the hypersparse list for C, from GB_emult_08_phase0
     if (C_is_hyper)
     {
-        // C->h is currently shallow; a copy is made at the end
-        GB_array_borrow (GB_SLOT (C, h), (void *) Ch, Ch_mem) ;
+        // Ch is the hyperlist of M, A, or B.  If that matrix owns its h, C
+        // shares it (refcount; GB_transplant later moves it into the result).
+        // Otherwise it is a readonly view and C borrows it; GB_transplant
+        // copies a borrowed array, and GB_hyper_prune below replaces it
+        // anyway if C has empty vectors.
+        if (Ch_source != NULL && !Ch_source->h_shallow)
+        { 
+            ASSERT (Ch_source->h == Ch) ;
+            GB_array_share (GB_SLOT (C, h), GB_CSLOT (Ch_source, h)) ;
+        }
+        else
+        { 
+            GB_array_borrow (GB_SLOT (C, h), (void *) Ch, Ch_mem) ;
+        }
         C->nvec = Cnvec ;
     }
 

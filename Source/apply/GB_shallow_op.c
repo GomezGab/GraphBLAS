@@ -9,17 +9,22 @@
 
 // C = op (A), called only by GB_apply.
 
-// Create a shallow copy of a matrix, applying an operator to the entries.
+// C shares the pattern of A and holds its own values, op applied.  The
+// pattern arrays of A (p, h, b, i) are shared through the reference-counted
+// GB_array layer (refs incremented, nothing copied); an array that A merely
+// borrows (a readonly view) is borrowed again.  C->x is allocated and
+// computed, unless no typecasting is needed and op is the identity, in which
+// case C->x is shared too.  C and A have the same integer sizes.
 
 // The CSR/CSC format of C and A can differ, but they have they same vlen and
 // vdim.  This function is CSR/CSC agnostic, except that C_is_csc is used to
 // set the C->is_csc state in C.
 
-// The values are typically not a shallow copy, unless no typecasting is needed
-// and the operator is an identity operator.
-
-// The pattern is always a shallow copy; C and A have the same integer sizes.
-// Shallow matrices are never passed back to the user.
+// The callers (GB_apply, then GB_accum_mask and GB_transplant) did not change
+// when the pattern went from borrowed to shared: GB_transplant moves a shared
+// array into the result and copies a borrowed one, so the copy that used to
+// be made there is simply no longer needed.  C is never passed back to the
+// user as is.
 
 // Compare this function with GB_shallow_copy.c.
 

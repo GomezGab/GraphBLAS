@@ -74,7 +74,7 @@ GrB_Info GB_bitmap_expand_to_hyper
 
     GB_MDECL (Cp, , u) ; uint64_t Cp_mem = 0 ; bool Cp_shallow = false ;
     GB_MDECL (Ci, , u) ; uint64_t Ci_mem = 0 ; bool Ci_shallow = false ;
-    void *Ch = NULL ; uint64_t Ch_mem = 0 ; bool Ch_shallow = false ;
+    GB_VSLOT_DECLARE (void *, Ch) ;
 
     Cp = GB_array_malloc (GB_VSLOT (Cp), cvdim+1, cpsize, data_arena) ;
     if (B_is_hyper)

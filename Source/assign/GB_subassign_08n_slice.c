@@ -150,7 +150,9 @@ GB_CALLBACK_SUBASSIGN_08N_SLICE_PROTO (GB_subassign_08n_slice)
     bool Zp_is_32, Zj_is_32, Zi_is_32 ;
 
     int Z_sparsity = GxB_SPARSE ;
-    GB_OK (GB_emult_08_phase0 (&Znvec, &Zh_shallow, &Zh_mem, NULL, NULL,
+    GrB_Matrix Zh_source = NULL ;   // unused here: Zh_shallow is only read
+    GB_OK (GB_emult_08_phase0 (&Znvec, &Zh_shallow, &Zh_mem, &Zh_source,
+        NULL, NULL,
         &Z_to_A, &Z_to_A_mem, &Z_to_M, &Z_to_M_mem,
         &Zp_is_32, &Zj_is_32, &Zi_is_32,
         &Z_sparsity, NULL, false, A, M, data_arena, Werk)) ;

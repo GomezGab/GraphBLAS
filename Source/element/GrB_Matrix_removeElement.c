@@ -17,11 +17,12 @@
 // GB_removeElement: remove C(i,j) if it exists
 //------------------------------------------------------------------------------
 
-static inline bool GB_removeElement     // return true if found
+static inline GrB_Info GB_removeElement
 (
     GrB_Matrix C,
     uint64_t i,
-    uint64_t j
+    uint64_t j,
+    bool *found             // true if C(i,j) was found
 )
 {
 
@@ -48,12 +49,17 @@ static inline bool GB_removeElement     // return true if found
         int8_t cb = Cb [p] ;
         if (cb != 0)
         { 
-            // C(i,j) is present; remove it
+            // C(i,j) is present; remove it.  C->b is written: C must own it
+            GrB_Info info = GB_own_matrix (C, GB_OWN_B,
+                GB_Context_nthreads_max ( )) ;
+            if (info != GrB_SUCCESS) return (info) ;
+            Cb = C->b ;
             Cb [p] = 0 ;
             C->nvals-- ;
         }
         // C(i,j) is always found, whether present or not
-        return (true) ;
+        (*found) = true ;
+        return (GrB_SUCCESS) ;
 
     }
     else
@@ -66,7 +72,6 @@ static inline bool GB_removeElement     // return true if found
         GB_Cp_DECLARE (Cp, const) ; GB_Cp_PTR (Cp, C) ;
         GB_Ci_DECLARE (Ci,      ) ; GB_Ci_PTR (Ci, C) ;
 
-        bool found ;
         int64_t pC_start, pC_end ;
 
         if (C->h != NULL)
@@ -84,11 +89,11 @@ static inline bool GB_removeElement     // return true if found
             int64_t k = GB_hyper_hash_lookup (C->p_is_32, C->j_is_32,
                 C->h, cnvec, Cp, C_Yp, C_Yi, C_Yx, C_hash_bits,
                 j, &pC_start, &pC_end) ;
-            found = (k >= 0) ;
-            if (!found)
+            (*found) = (k >= 0) ;
+            if (!(*found))
             { 
                 // vector j is empty
-                return (false) ;
+                return (GrB_SUCCESS) ;
             }
             #ifdef GB_DEBUG
             GB_Ch_DECLARE (Ch, const) ; GB_Ch_PTR (Ch, C) ;
@@ -119,21 +124,25 @@ static inline bool GB_removeElement     // return true if found
             pleft = pleft + i ;
             int64_t iC = GB_IGET (Ci, pleft) ;
             ASSERT (i == GB_UNZOMBIE (iC)) ;
-            found = true ;
+            (*found) = true ;
             is_zombie = GB_IS_ZOMBIE (iC) ;
         }
         else
         { 
             // binary search for C(i,k): time is O(log(cknz))
             const bool may_see_zombies = (C->nzombies > 0) ;
-            found = GB_binary_search_zombie (i, Ci, C->i_is_32,
+            (*found) = GB_binary_search_zombie (i, Ci, C->i_is_32,
                 &pleft, &pright, may_see_zombies, &is_zombie) ;
         }
 
         // remove the entry if found (unless it is already a zombie)
-        if (found && !is_zombie)
+        if ((*found) && !is_zombie)
         { 
-            // C(i,j) becomes a zombie
+            // C(i,j) becomes a zombie.  C->i is written: C must own it
+            GrB_Info info = GB_own_matrix (C, GB_OWN_I,
+                GB_Context_nthreads_max ( )) ;
+            if (info != GrB_SUCCESS) return (info) ;
+            GB_Ci_PTR (Ci, C) ;
             #ifdef GB_DEBUG
             int64_t iC = GB_IGET (Ci, pleft) ;
             ASSERT (i == iC) ;
@@ -142,7 +151,7 @@ static inline bool GB_removeElement     // return true if found
             GB_ISET (Ci, pleft, i) ;    // Ci [pleft] = i ;
             C->nzombies++ ;
         }
-        return (found) ;
+        return (GrB_SUCCESS) ;
     }
 }
 
@@ -193,10 +202,6 @@ GrB_Info GB_Matrix_removeElement
     ASSERT (!GB_JUMBLED (C)) ;
     ASSERT (GB_PENDING_OK (C)) ;
 
-    // C->b (bitmap) or C->i (zombie) is modified in place: C must own it
-    GB_OK (GB_own_matrix (C, GB_IS_BITMAP (C) ? GB_OWN_B : GB_OWN_I,
-        GB_Context_nthreads_max ( ))) ;
-
     // look for index i in vector j
     int64_t i, j, nrows, ncols ;
     if (C->is_csc)
@@ -236,8 +241,11 @@ GrB_Info GB_Matrix_removeElement
         return (GrB_SUCCESS) ;
     }
 
-    // remove the entry
-    if (GB_removeElement (C, i, j))
+    // remove the entry; ownership of C->b or C->i is claimed inside, only if
+    // an entry is actually written
+    bool found ;
+    GB_OK (GB_removeElement (C, i, j, &found)) ;
+    if (found)
     { 
         // found it; no need to assemble pending tuples
         return (GrB_SUCCESS) ;
@@ -251,7 +259,7 @@ GrB_Info GB_Matrix_removeElement
         ASSERT (!GB_JUMBLED (C)) ;
         ASSERT (!GB_PENDING (C)) ;
         // look again; remove the entry if it was a pending tuple
-        GB_removeElement (C, i, j) ;
+        GB_OK (GB_removeElement (C, i, j, &found)) ;
     }
 
     return (GrB_SUCCESS) ;

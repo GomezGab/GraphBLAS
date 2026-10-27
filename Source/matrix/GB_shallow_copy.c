@@ -7,15 +7,19 @@
 
 //------------------------------------------------------------------------------
 
-// Create a purely shallow copy C of a matrix A.  No typecasting is done.  If A
-// has zombies or pending tuples, those are finished first.
+// Create a copy C of a matrix A that shares every array of A: the arrays A
+// owns are shared through the reference-counted GB_array layer (nothing is
+// copied), and the arrays A borrows (readonly views) are borrowed again.  No
+// typecasting is done.  If A has zombies or pending tuples, those are
+// finished first.  GB_transplant later moves the shared arrays into the
+// final result and copies the borrowed ones.
 
 // The CSR/CSC format of C and A can differ, but they have they same vlen and
 // vdim.  This function is CSR/CSC agnostic, except that C_is_csc is used to
 // set the C->is_csc state in C.  The matrix C has the same iso property as
 // the matrix A.
 
-// Shallow matrices are never passed back to the user.
+// C is never passed back to the user as is.
 
 // A has any sparsity structure (hypersparse, sparse, bitmap, or full).
 

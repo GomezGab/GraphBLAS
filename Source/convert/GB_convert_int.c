@@ -112,12 +112,12 @@ GrB_Info GB_convert_int     // convert the integers of a matrix
     // and also so that the conversion will be all-or-nothing, if out of
     // memory.
 
-    void *Ap_new = NULL ; uint64_t Ap_new_mem = 0 ; bool Ap_new_shallow = false ;
-    void *Ah_new = NULL ; uint64_t Ah_new_mem = 0 ; bool Ah_new_shallow = false ;
-    void *Ai_new = NULL ; uint64_t Ai_new_mem = 0 ; bool Ai_new_shallow = false ;
-    void *Yp_new = NULL ; uint64_t Yp_new_mem = 0 ; bool Yp_new_shallow = false ;
-    void *Yi_new = NULL ; uint64_t Yi_new_mem = 0 ; bool Yi_new_shallow = false ;
-    void *Yx_new = NULL ; uint64_t Yx_new_mem = 0 ; bool Yx_new_shallow = false ;
+    GB_VSLOT_DECLARE (void *, Ap_new) ;
+    GB_VSLOT_DECLARE (void *, Ah_new) ;
+    GB_VSLOT_DECLARE (void *, Ai_new) ;
+    GB_VSLOT_DECLARE (void *, Yp_new) ;
+    GB_VSLOT_DECLARE (void *, Yi_new) ;
+    GB_VSLOT_DECLARE (void *, Yx_new) ;
     void *Pending_i_new = NULL ; uint64_t Pending_i_new_mem = mem ;
     void *Pending_j_new = NULL ; uint64_t Pending_j_new_mem = mem ;
     bool has_Pending_i = (Pending != NULL) && (Pending->i != NULL) ;

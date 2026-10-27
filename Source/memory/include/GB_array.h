@@ -77,13 +77,18 @@ GB_array_hdr ;
     (const void *) ((A)->c), ((A)->c ## _mem), ((A)->c ## _shallow)
 
 // GB_VSLOT: a slot held in local variables v, v_mem, and v_shallow, for
-// workspace that will be moved into a matrix with GB_array_move.  Declare as:
-//      type *v = NULL ; uint64_t v_mem = 0 ; bool v_shallow = false ;
-// allocate with GB_array_malloc (GB_VSLOT (v), ...), free on error with
-// GB_array_release (GB_VSLOT (v)), and GB_array_move (GB_SLOT (A, c),
-// GB_VSLOT (v)) cannot fail, so no new error path is needed at the move.
+// workspace that will be moved into a matrix with GB_array_move.  Declare it
+// with GB_VSLOT_DECLARE (type, v), which expands to the three locals:
+//      type v = NULL ; uint64_t v_mem = 0 ; bool v_shallow = false ;
+// (v_shallow is always false for workspace; it exists so the three locals
+// form a complete slot).  Allocate with GB_array_malloc (GB_VSLOT (v), ...),
+// free on error with GB_array_release (GB_VSLOT (v)), and
+// GB_array_move (GB_SLOT (A, c), GB_VSLOT (v)) cannot fail, so no new error
+// path is needed at the move.
 #define GB_VSLOT(v) \
     (void **) &(v), &(v ## _mem), &(v ## _shallow)
+#define GB_VSLOT_DECLARE(type,v) \
+    type v = NULL ; uint64_t v ## _mem = 0 ; bool v ## _shallow = false
 
 //------------------------------------------------------------------------------
 // GB_array_hdr_get: the header of an owned slot, or NULL
@@ -393,6 +398,13 @@ void *GB_array_xalloc       // pointer to the new block, or NULL if failed
     int arena               // arena to allocate the block and header in
 ) ;
 
+// GB_array_own: make a slot exclusively owned and writable, keeping its
+// content.  An absent slot or an exclusively owned block: no-op, returns
+// GrB_SUCCESS.  A shared block (refs > 1): the live bytes are copied into a
+// new private block and the old reference dropped.  A borrowed (shallow)
+// block: also copied into a new private block, so the slot becomes owned;
+// the user's array is untouched.  Returns GrB_OUT_OF_MEMORY, with the slot
+// unchanged, if the copy cannot be allocated.
 GrB_Info GB_array_own       // GrB_SUCCESS or GrB_OUT_OF_MEMORY
 (
     // input/output:
@@ -403,24 +415,52 @@ GrB_Info GB_array_own       // GrB_SUCCESS or GrB_OUT_OF_MEMORY
     int nthreads            // # of threads to use for the copy
 ) ;
 
-// which arrays GB_own_matrix must make private
-#define GB_OWN_P   1
-#define GB_OWN_H   2
-#define GB_OWN_B   4
-#define GB_OWN_I   8
-#define GB_OWN_X   16
-#define GB_OWN_ALL 31
+// GB_array_own_discard: make a slot exclusively owned without keeping its
+// content, for a caller about to overwrite the whole block.  A shared block
+// is dropped and replaced by a new uninitialized block of the same size (no
+// copy).  Absent, borrowed, or exclusively owned slots are left as they are.
+GrB_Info GB_array_own_discard   // GrB_SUCCESS or GrB_OUT_OF_MEMORY
+(
+    // input/output:
+    void **p, uint64_t *mem, bool *shallow      // slot to make writable
+) ;
 
+// which arrays GB_own_matrix and GB_own_discard must make private; any
+// combination may be or'ed together
+typedef enum
+{
+    GB_OWN_P   = 1,
+    GB_OWN_H   = 2,
+    GB_OWN_B   = 4,
+    GB_OWN_I   = 8,
+    GB_OWN_X   = 16,
+    GB_OWN_ALL = 31
+}
+GB_own_code ;
+
+// GB_own_matrix: called before a matrix is modified in place.  Each selected
+// array that is shared with another matrix is replaced with a private copy of
+// its live bytes (GB_array_own).  Borrowed (shallow) arrays are left as they
+// are: a readonly component is rejected earlier by the methods that would
+// write it, so the shallow semantics are unchanged.
 GrB_Info GB_own_matrix      // GrB_SUCCESS or GrB_OUT_OF_MEMORY
 (
     // input/output:
-    GrB_Matrix A,           // matrix about to be modified in place: any of
-                            // the selected A->[phbix] that is shared with
-                            // another matrix is replaced with a private copy.
-                            // Borrowed (shallow) arrays are left as they are.
+    GrB_Matrix A,           // matrix about to be modified in place
     // input:
     int which,              // any combination of GB_OWN_P, ..., GB_OWN_X
     int nthreads            // # of threads to use for the copies
+) ;
+
+// GB_own_discard: like GB_own_matrix, for arrays the caller overwrites in
+// full: a shared array is dropped and replaced by an uninitialized block of
+// the same size (GB_array_own_discard), saving the copy.
+GrB_Info GB_own_discard     // GrB_SUCCESS or GrB_OUT_OF_MEMORY
+(
+    // input/output:
+    GrB_Matrix A,           // matrix about to be overwritten in place
+    // input:
+    int which               // any combination of GB_OWN_P, ..., GB_OWN_X
 ) ;
 
 #ifdef GB_DEBUG

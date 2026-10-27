@@ -43,7 +43,7 @@ static GrB_Info GB_set_slot_arena
     if (GB_array_refs (*p, *mem, *shallow) > 1)
     {
         // shared: copy the live bytes into a new block in the new arena
-        void *q = NULL ; uint64_t q_mem = 0 ; bool q_shallow = false ;
+        GB_VSLOT_DECLARE (void *, q) ;
         if (GB_array_malloc (GB_VSLOT (q), GB_IMAX (new_memsize, 1), 1,
             new_arena) == NULL)
         {
@@ -119,6 +119,10 @@ GrB_Info GB_set_arenas          // modify all arenas of a matrix
     A = (*Ahandle) ;
     A->header_mem = header_mem ;
 
+    // Each array header (GB_array_hdr) lives in the same arena as its block
+    // (GB_array_hdr_new), so GB_set_slot_arena moves block and header together.
+    // Keeping the headers in the header arena instead is an open choice; it
+    // would need the header arena passed to every GB_array_* allocation.
     //--------------------------------------------------------------------------
     // set the arena of A->[phbix] to the new data arena
     //--------------------------------------------------------------------------

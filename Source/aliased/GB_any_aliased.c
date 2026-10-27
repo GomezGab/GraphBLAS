@@ -23,8 +23,8 @@
 
 bool GB_any_aliased             // determine if A and B are aliased
 (
-    GrB_Matrix A,           // input A matrix
-    GrB_Matrix B            // input B matrix
+    const GrB_Matrix A,           // input A matrix
+    const GrB_Matrix B            // input B matrix
 )
 {
 
@@ -105,8 +105,8 @@ bool GB_any_aliased             // determine if A and B are aliased
 
 bool GB_any_shared              // true if A and B hold any array in common
 (
-    GrB_Matrix A,           // input A matrix
-    GrB_Matrix B            // input B matrix
+    const GrB_Matrix A,           // input A matrix
+    const GrB_Matrix B            // input B matrix
 )
 {
     if (A == NULL || B == NULL)

@@ -19,14 +19,14 @@
 
 // V is returned as a non-iso vector of length n, in the full data format.
 
-// Contract relied on by LAGraph and FalkorDB: a load that follows a
-// GxB_Vector_unload of the same vector, or that replaces content the vector
-// owns exclusively, performs no allocation and cannot fail, because the
-// vector keeps the header of the unloaded (or replaced) array as a spare and
-// reuses it (see GB_array_spare_take in memory/GB_array.c).  A readonly load
-// never allocates.  Only a load with GrB_DEFAULT handling into a vector that
-// has neither a spare nor exclusively owned content allocates a header, and
-// only that case can return GrB_OUT_OF_MEMORY; *X then remains the caller's.
+// A load that follows a GxB_Vector_unload of the same vector, or that
+// replaces content the vector owns exclusively, performs no allocation and
+// cannot fail: the vector keeps the header of the unloaded (or replaced)
+// array as a spare and reuses it (see GB_array_spare_take in
+// memory/GB_array.c).  A readonly load never allocates.  Only a load with
+// GrB_DEFAULT handling into a vector that has neither a spare nor exclusively
+// owned content allocates a header, and only that case can return
+// GrB_OUT_OF_MEMORY; *X then remains the caller's.
 
 // If handling is GxB_IS_READONLY, *X is returned unchanged.  Otherwise, it is
 // returned as NULL to indicate that it has been moved into V.
@@ -120,7 +120,7 @@ GrB_Info GxB_Vector_load
     // those cases.  Otherwise, if a header cannot be allocated, *X remains the
     // property of the user application and V is unchanged.
     GB_array_hdr *spare = GB_array_spare_take (GB_SLOT (V, x)) ;
-    void *Xs = NULL ; uint64_t Xs_mem = 0 ; bool Xs_shallow = false ;
+    GB_VSLOT_DECLARE (void *, Xs) ;
     bool ok ;
     GB_array_load (GB_VSLOT (Xs), *X, X_mem, readonly, true, spare, &ok) ;
     if (!ok)

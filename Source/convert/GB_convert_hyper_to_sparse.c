@@ -68,17 +68,20 @@ GrB_Info GB_convert_hyper_to_sparse // convert hypersparse to sparse
         // A is a single hypersparse vector
         //----------------------------------------------------------------------
 
-        // This cannot fail, since no memory is allocated.  It must succeed if
-        // A is a typecasted GrB_Vector, or else it will be returned to the
-        // user as an invalid GrB_Vector.
+        // No memory is allocated unless A->p is shared with another matrix,
+        // in which case a fresh 2-entry A->p replaces it (GB_own_discard).
+        // If that allocation fails, A is left unchanged and still
+        // hypersparse, so a typecasted GrB_Vector would be returned to the
+        // user as an invalid GrB_Vector; the caller returns the error.
 
         ASSERT (A->plen == 1) ;
         ASSERT (GB_array_memsize (GB_CSLOT (A, p)) >= 2 * psize) ;
         ASSERT (A->nvec == 0 || A->nvec == 1) ;
         if (A->nvec == 0)
         {
-            // Ap [0:1] = 0, written in place: A->p must not be shared
-            GrB_Info info_own = GB_own_matrix (A, GB_OWN_P, 1) ;
+            // Ap [0:1] = 0 overwrites all of A->p: a shared A->p is dropped
+            // and replaced, not copied
+            GrB_Info info_own = GB_own_discard (A, GB_OWN_P) ;
             if (info_own != GrB_SUCCESS)
             {
                 return (info_own) ;
@@ -119,8 +122,7 @@ GrB_Info GB_convert_hyper_to_sparse // convert hypersparse to sparse
         // allocate the new Ap array, of size n+1
         //----------------------------------------------------------------------
 
-        void *Ap_new = NULL ; uint64_t Ap_new_mem = 0 ;
-        bool Ap_new_shallow = false ;
+        GB_VSLOT_DECLARE (void *, Ap_new) ;     // local slot, moved into A
         Ap_new = GB_array_malloc (GB_VSLOT (Ap_new), n+1, psize, data_arena) ;
         if (Ap_new == NULL)
         { 

@@ -51,6 +51,7 @@ GrB_Info GB_emult_08_phase0     // find vectors in C for C=A.*B or C<M>=A.*B
     int64_t *p_Cnvec,           // # of vectors to compute in C
     const void **Ch_handle,     // Ch is M->h, A->h, B->h, or NULL
     uint64_t *Ch_mem_handle,
+    GrB_Matrix *Ch_source_handle,   // the matrix whose h is Ch, or NULL
     int64_t *restrict *C_to_M_handle,    // C_to_M: size Cnvec, or NULL
     uint64_t *C_to_M_mem_handle,
     int64_t *restrict *C_to_A_handle,    // C_to_A: size Cnvec, or NULL
@@ -116,6 +117,7 @@ GrB_Info GB_emult_08_phase0     // find vectors in C for C=A.*B or C<M>=A.*B
     (*p_Cnvec) = 0 ;          
     (*Ch_handle) = NULL ;
     (*Ch_mem_handle) = 0 ;
+    (*Ch_source_handle) = NULL ;
     if (C_to_M_handle != NULL)
     { 
         (*C_to_M_handle) = NULL ;
@@ -126,6 +128,7 @@ GrB_Info GB_emult_08_phase0     // find vectors in C for C=A.*B or C<M>=A.*B
     ASSERT ((*C_sparsity) == GxB_SPARSE || (*C_sparsity) == GxB_HYPERSPARSE) ;
 
     GB_MDECL (Ch, , u) ; uint64_t Ch_mem = mem ;
+    GrB_Matrix Ch_source = NULL ;
 
     int64_t *restrict C_to_M = NULL ; uint64_t C_to_M_mem = mem ;
     int64_t *restrict C_to_A = NULL ; uint64_t C_to_A_mem = mem ;
@@ -205,17 +208,17 @@ GrB_Info GB_emult_08_phase0     // find vectors in C for C=A.*B or C<M>=A.*B
                     Cnvec = GB_IMIN (Cnvec, Mnvec) ;
                     if (Cnvec == Anvec)
                     { 
-                        Ch = Ah ; Ch_mem = GB_array_mem (GB_CSLOT (A, h)) ;
+                        Ch = Ah ; Ch_mem = GB_array_mem (GB_CSLOT (A, h)) ; Ch_source = A ;
                         Cj_is_32 = A->j_is_32 ;
                     }
                     else if (Cnvec == Bnvec)
                     { 
-                        Ch = Bh ; Ch_mem = GB_array_mem (GB_CSLOT (B, h)) ;
+                        Ch = Bh ; Ch_mem = GB_array_mem (GB_CSLOT (B, h)) ; Ch_source = B ;
                         Cj_is_32 = B->j_is_32 ;
                     }
                     else // (Cnvec == Mnvec)
                     { 
-                        Ch = Mh ; Ch_mem = GB_array_mem (GB_CSLOT (M, h)) ;
+                        Ch = Mh ; Ch_mem = GB_array_mem (GB_CSLOT (M, h)) ; Ch_source = M ;
                         Cj_is_32 = M->j_is_32 ;
                     }
 
@@ -231,13 +234,13 @@ GrB_Info GB_emult_08_phase0     // find vectors in C for C=A.*B or C<M>=A.*B
                     (*C_sparsity) = GxB_HYPERSPARSE ;
                     if (Anvec <= Bnvec)
                     { 
-                        Ch = Ah ; Ch_mem = GB_array_mem (GB_CSLOT (A, h)) ;
+                        Ch = Ah ; Ch_mem = GB_array_mem (GB_CSLOT (A, h)) ; Ch_source = A ;
                         Cj_is_32 = A->j_is_32 ;
                         Cnvec = Anvec ;
                     }
                     else
                     { 
-                        Ch = Bh ; Ch_mem = GB_array_mem (GB_CSLOT (B, h)) ;
+                        Ch = Bh ; Ch_mem = GB_array_mem (GB_CSLOT (B, h)) ; Ch_source = B ;
                         Cj_is_32 = B->j_is_32 ;
                         Cnvec = Bnvec ;
                     }
@@ -258,13 +261,13 @@ GrB_Info GB_emult_08_phase0     // find vectors in C for C=A.*B or C<M>=A.*B
                     (*C_sparsity) = GxB_HYPERSPARSE ;
                     if (Anvec <= Mnvec)
                     { 
-                        Ch = Ah ; Ch_mem = GB_array_mem (GB_CSLOT (A, h)) ;
+                        Ch = Ah ; Ch_mem = GB_array_mem (GB_CSLOT (A, h)) ; Ch_source = A ;
                         Cj_is_32 = A->j_is_32 ;
                         Cnvec = Anvec ;
                     }
                     else
                     { 
-                        Ch = Mh ; Ch_mem = GB_array_mem (GB_CSLOT (M, h)) ;
+                        Ch = Mh ; Ch_mem = GB_array_mem (GB_CSLOT (M, h)) ; Ch_source = M ;
                         Cj_is_32 = M->j_is_32 ;
                         Cnvec = Mnvec ;
                     }
@@ -278,7 +281,7 @@ GrB_Info GB_emult_08_phase0     // find vectors in C for C=A.*B or C<M>=A.*B
                     //----------------------------------------------------------
 
                     (*C_sparsity) = GxB_HYPERSPARSE ;
-                    Ch = Ah ; Ch_mem = GB_array_mem (GB_CSLOT (A, h)) ;
+                    Ch = Ah ; Ch_mem = GB_array_mem (GB_CSLOT (A, h)) ; Ch_source = A ;
                     Cj_is_32 = A->j_is_32 ;
                     Cnvec = Anvec ;
                 }
@@ -301,13 +304,13 @@ GrB_Info GB_emult_08_phase0     // find vectors in C for C=A.*B or C<M>=A.*B
                     (*C_sparsity) = GxB_HYPERSPARSE ;
                     if (Bnvec <= Mnvec)
                     { 
-                        Ch = Bh ; Ch_mem = GB_array_mem (GB_CSLOT (B, h)) ;
+                        Ch = Bh ; Ch_mem = GB_array_mem (GB_CSLOT (B, h)) ; Ch_source = B ;
                         Cj_is_32 = B->j_is_32 ;
                         Cnvec = Bnvec ;
                     }
                     else
                     { 
-                        Ch = Mh ; Ch_mem = GB_array_mem (GB_CSLOT (M, h)) ;
+                        Ch = Mh ; Ch_mem = GB_array_mem (GB_CSLOT (M, h)) ; Ch_source = M ;
                         Cj_is_32 = M->j_is_32 ;
                         Cnvec = Mnvec ;
                     }
@@ -321,7 +324,7 @@ GrB_Info GB_emult_08_phase0     // find vectors in C for C=A.*B or C<M>=A.*B
                     //----------------------------------------------------------
 
                     (*C_sparsity) = GxB_HYPERSPARSE ;
-                    Ch = Bh ; Ch_mem = GB_array_mem (GB_CSLOT (B, h)) ;
+                    Ch = Bh ; Ch_mem = GB_array_mem (GB_CSLOT (B, h)) ; Ch_source = B ;
                     Cj_is_32 = B->j_is_32 ;
                     Cnvec = Bnvec ;
 
@@ -338,7 +341,7 @@ GrB_Info GB_emult_08_phase0     // find vectors in C for C=A.*B or C<M>=A.*B
                     //----------------------------------------------------------
 
                     (*C_sparsity) = GxB_HYPERSPARSE ;
-                    Ch = Mh ; Ch_mem = GB_array_mem (GB_CSLOT (M, h)) ;
+                    Ch = Mh ; Ch_mem = GB_array_mem (GB_CSLOT (M, h)) ; Ch_source = M ;
                     Cj_is_32 = M->j_is_32 ;
                     Cnvec = Mnvec ;
 
@@ -380,13 +383,13 @@ GrB_Info GB_emult_08_phase0     // find vectors in C for C=A.*B or C<M>=A.*B
                 (*C_sparsity) = GxB_HYPERSPARSE ;
                 if (Anvec <= Bnvec)
                 { 
-                    Ch = Ah ; Ch_mem = GB_array_mem (GB_CSLOT (A, h)) ;
+                    Ch = Ah ; Ch_mem = GB_array_mem (GB_CSLOT (A, h)) ; Ch_source = A ;
                     Cj_is_32 = A->j_is_32 ;
                     Cnvec = Anvec ;
                 }
                 else
                 { 
-                    Ch = Bh ; Ch_mem = GB_array_mem (GB_CSLOT (B, h)) ;
+                    Ch = Bh ; Ch_mem = GB_array_mem (GB_CSLOT (B, h)) ; Ch_source = B ;
                     Cj_is_32 = B->j_is_32 ;
                     Cnvec = Bnvec ;
                 }
@@ -400,7 +403,7 @@ GrB_Info GB_emult_08_phase0     // find vectors in C for C=A.*B or C<M>=A.*B
                 //--------------------------------------------------------------
 
                 (*C_sparsity) = GxB_HYPERSPARSE ;
-                Ch = Ah ; Ch_mem = GB_array_mem (GB_CSLOT (A, h)) ;
+                Ch = Ah ; Ch_mem = GB_array_mem (GB_CSLOT (A, h)) ; Ch_source = A ;
                 Cj_is_32 = A->j_is_32 ;
                 Cnvec = Anvec ;
 
@@ -418,7 +421,7 @@ GrB_Info GB_emult_08_phase0     // find vectors in C for C=A.*B or C<M>=A.*B
                 //--------------------------------------------------------------
 
                 (*C_sparsity) = GxB_HYPERSPARSE ;
-                Ch = Bh ; Ch_mem = GB_array_mem (GB_CSLOT (B, h)) ;
+                Ch = Bh ; Ch_mem = GB_array_mem (GB_CSLOT (B, h)) ; Ch_source = B ;
                 Cj_is_32 = B->j_is_32 ;
                 Cnvec = Bnvec ;
 
@@ -568,6 +571,7 @@ GrB_Info GB_emult_08_phase0     // find vectors in C for C=A.*B or C<M>=A.*B
     (*p_Cnvec) = Cnvec ;
     (*Ch_handle) = Ch ;
     (*Ch_mem_handle) = Ch_mem ;
+    (*Ch_source_handle) = Ch_source ;
     (*p_Cp_is_32) = Cp_is_32 ;
     (*p_Cj_is_32) = Cj_is_32 ;
     (*p_Ci_is_32) = Ci_is_32 ;

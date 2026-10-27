@@ -263,6 +263,40 @@ GrB_Info GB_array_own       // GrB_SUCCESS or GrB_OUT_OF_MEMORY
 }
 
 //------------------------------------------------------------------------------
+// GB_array_own_discard: make a slot exclusively owned, discarding its content
+//------------------------------------------------------------------------------
+
+// For a caller that overwrites the whole block: a shared block is replaced by
+// a new uninitialized block of the same size in the same arena, and the old
+// reference is dropped.  Nothing is copied.  Absent, borrowed, and exclusively
+// owned slots are left as they are.
+
+GrB_Info GB_array_own_discard   // GrB_SUCCESS or GrB_OUT_OF_MEMORY
+(
+    // input/output:
+    void **p, uint64_t *mem, bool *shallow      // slot to make writable
+)
+{
+    if ((*p) == NULL || (*shallow) || !GB_array_is_shared (*p, *mem, *shallow))
+    { 
+        // absent, borrowed, or already exclusively owned
+        return (GrB_SUCCESS) ;
+    }
+    uint64_t nbytes = GB_array_memsize (*p, *mem, *shallow) ;
+    int arena = GB_array_arena (*p, *mem, *shallow) ;
+    GB_VSLOT_DECLARE (void *, new_block) ;
+    if (GB_array_malloc (GB_VSLOT (new_block), nbytes, sizeof (GB_void), arena)
+        == NULL)
+    { 
+        // out of memory; the slot is unchanged
+        return (GrB_OUT_OF_MEMORY) ;
+    }
+    GB_array_release (p, mem, shallow) ;
+    GB_array_move (p, mem, shallow, GB_VSLOT (new_block)) ;
+    return (GrB_SUCCESS) ;
+}
+
+//------------------------------------------------------------------------------
 // GB_own_matrix: make every shared array of a matrix private
 //------------------------------------------------------------------------------
 
@@ -337,6 +371,38 @@ GrB_Info GB_own_matrix      // GrB_SUCCESS or GrB_OUT_OF_MEMORY
     GB_OWN_SLOT (i, GB_OWN_I) ;
     GB_OWN_SLOT (x, GB_OWN_X) ;
     #undef GB_OWN_SLOT
+    return (GrB_SUCCESS) ;
+}
+
+//------------------------------------------------------------------------------
+// GB_own_discard: make every shared array private, discarding its content
+//------------------------------------------------------------------------------
+
+GrB_Info GB_own_discard     // GrB_SUCCESS or GrB_OUT_OF_MEMORY
+(
+    // input/output:
+    GrB_Matrix A,           // matrix about to be overwritten in place
+    // input:
+    int which               // any combination of GB_OWN_P, ..., GB_OWN_X
+)
+{
+    if (A == NULL)
+    {
+        return (GrB_SUCCESS) ;
+    }
+    GrB_Info info ;
+    #define GB_DISCARD_SLOT(c,flag)                                         \
+    if (which & flag)                                                       \
+    {                                                                       \
+        info = GB_array_own_discard (GB_SLOT (A, c)) ;                      \
+        if (info != GrB_SUCCESS) return (info) ;                            \
+    }
+    GB_DISCARD_SLOT (p, GB_OWN_P) ;
+    GB_DISCARD_SLOT (h, GB_OWN_H) ;
+    GB_DISCARD_SLOT (b, GB_OWN_B) ;
+    GB_DISCARD_SLOT (i, GB_OWN_I) ;
+    GB_DISCARD_SLOT (x, GB_OWN_X) ;
+    #undef GB_DISCARD_SLOT
     return (GrB_SUCCESS) ;
 }
 

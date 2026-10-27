@@ -445,7 +445,7 @@ GrB_Info GB_ijxvector
             I_type, ni, 1, GB_ph_null, true, GxB_FULL, 0, 0,
             false, false, false, data_arena, data_arena)) ;
         // T->x is a borrowed (readonly) view of I; it is not freed with T
-        void *Is = NULL ; uint64_t Is_mem = 0 ; bool Is_shallow = false ;
+        GB_VSLOT_DECLARE (void *, Is) ;
         GB_array_borrow (GB_VSLOT (Is), (void *) I, ni * (I_type->size)) ;
         GB_vector_load ((GrB_Vector) T, GB_VSLOT (Is), I_type, ni) ;
         ASSERT_MATRIX_OK (T, "T for typecast to I", GB0) ;

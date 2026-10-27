@@ -354,8 +354,20 @@ GrB_Info GB_ewise                   // C<M> = accum (C, A+B) or A.*B
 
             // C_replace is ignored
             GBURBLE ("dense C=A+B ") ;
-            // C may be modified in place, so C must own its content
-            GB_OK (GB_own_matrix (C, GB_OWN_ALL, GB_Context_nthreads_max ( ))) ;
+            // C->x is overwritten in full.  If C is already full, not iso,
+            // and not one of the inputs, a shared C->x is dropped and replaced
+            // rather than copied.  If C is an input (C = C+B), its values are
+            // read, so it must own a copy; if C is not yet full, GB_ewise_fulln
+            // rebuilds it (releasing shared arrays) and no claim is needed.
+            if (GB_IS_FULL (C) && !C->iso && C != A1 && C != B1)
+            { 
+                GB_OK (GB_own_discard (C, GB_OWN_X)) ;
+            }
+            else
+            { 
+                GB_OK (GB_own_matrix (C, GB_OWN_ALL,
+                    GB_Context_nthreads_max ( ))) ;
+            }
             info = GB_ewise_fulln (C, op, A1, B1) ;
 
             if (info != GrB_NO_VALUE)
@@ -441,8 +453,9 @@ GrB_Info GB_ewise                   // C<M> = accum (C, A+B) or A.*B
                 // A1 is the temporary matrix AT.  AT->h might itself be a
                 // shallow copy of A->h or A->i, from GB_transpose.
                 ASSERT (A1 == AT) ;
-                // T takes over the ownership status of AT->h (owned or
-                // borrowed); AT keeps a borrowed view that is never freed
+                // T takes over AT->h as it is (owned by AT, or a shallow
+                // view borrowed from A); AT keeps a shallow view of it that
+                // is never freed.  Neither T nor AT writes it.
                 GB_array_clear (GB_SLOT (T, h)) ;
                 GB_array_move (GB_SLOT (T, h), GB_SLOT (AT, h)) ;
                 GB_array_borrow_from (GB_SLOT (AT, h), GB_CSLOT (T, h)) ;

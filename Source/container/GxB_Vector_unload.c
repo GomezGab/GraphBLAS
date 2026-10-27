@@ -69,7 +69,7 @@ GrB_Info GxB_Vector_unload
     // move V->x into a local slot, then hand the raw array to the user.  The
     // array is copied first if it is shared with another vector or matrix,
     // and it is removed from the debug global memtable.
-    void *Xs = NULL ; uint64_t Xs_mem = 0 ; bool Xs_shallow = false ;
+    GB_VSLOT_DECLARE (void *, Xs) ;
     GB_OK (GB_vector_unload (V, GB_VSLOT (Xs), type, n, Werk)) ;
     bool readonly ;
     uint64_t X_mem ;

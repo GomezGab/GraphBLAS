@@ -273,18 +273,6 @@ GrB_Info GB_setElement              // set a single entry, C(row,col) = scalar
 
     if (found)
     {
-        // C->x (and C->i or C->b) are modified in place: C must own them
-        int which = GB_OWN_X | (is_zombie ? GB_OWN_I : 0)
-                             | (C_is_bitmap ? GB_OWN_B : 0) ;
-        info = GB_own_matrix (C, which, GB_Context_nthreads_max ( )) ;
-        if (info != GrB_SUCCESS)
-        {
-            return (info) ;
-        }
-    }
-
-    if (found)
-    {
 
         //----------------------------------------------------------------------
         // C (i,j) found
@@ -295,7 +283,19 @@ GrB_Info GB_setElement              // set a single entry, C(row,col) = scalar
         //      with accum: action: ( C+=A ): accumulate A into C
         // else             action: ( undelete ): bring a zombie back to life
 
+        // for a bitmap or full C, "found" means the position exists; cb says
+        // whether the entry is present (C->b [pleft] is written only if not)
         int8_t cb = (C_is_bitmap) ? C->b [pleft] : 0 ;
+
+        // C->x is written in place, C->i if a zombie is revived, and C->b if
+        // the bitmap entry is absent: C must own those arrays
+        int which = GB_OWN_X | (is_zombie ? GB_OWN_I : 0)
+                             | ((C_is_bitmap && cb == 0) ? GB_OWN_B : 0) ;
+        info = GB_own_matrix (C, which, GB_Context_nthreads_max ( )) ;
+        if (info != GrB_SUCCESS)
+        {
+            return (info) ;
+        }
 
         if (!C->iso)
         { 
@@ -342,10 +342,10 @@ GrB_Info GB_setElement              // set a single entry, C(row,col) = scalar
             GB_ISET (Ci, pleft, i) ;    // Ci [pleft] = i ;
             C->nzombies-- ;
         }
-        else if (C_is_bitmap)
+        else if (C_is_bitmap && cb == 0)
         { 
             // set the entry in the C bitmap
-            C->nvals += (cb == 0) ;
+            C->nvals++ ;
             C->b [pleft] = 1 ;
         }
 

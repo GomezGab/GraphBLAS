@@ -11,7 +11,7 @@
 
 bool GB_is_shallow              // true if any component of A is shallow
 (
-    GrB_Matrix A                // matrix to query
+    const GrB_Matrix A          // matrix to query
 )
 {
 

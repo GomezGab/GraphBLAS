@@ -20,8 +20,8 @@
 
 bool GB_all_aliased         // determine if A and B are all aliased
 (
-    GrB_Matrix A,           // input A matrix
-    GrB_Matrix B            // input B matrix
+    const GrB_Matrix A,     // input A matrix
+    const GrB_Matrix B      // input B matrix
 )
 {
 
